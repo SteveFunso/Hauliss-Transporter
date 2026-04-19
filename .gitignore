@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.vercel/
+.env
+.env.local
+.DS_Store
+HaulissWebApp/app/node_modules/
+HaulissWebApp/app/dist/
+HaulissSuperAdmin/app/node_modules/
+HaulissSuperAdmin/app/dist/
+pgdata*/
+redisdata*/
+*.log
+.claude/
