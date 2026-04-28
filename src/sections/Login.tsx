@@ -6,7 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Truck, Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
 
-export default function Login() {
+type Props = {
+  onCreateAccount?: () => void;
+};
+
+export default function Login({ onCreateAccount }: Props = {}) {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -119,6 +123,21 @@ export default function Login() {
               )}
             </Button>
           </form>
+
+          {onCreateAccount && (
+            <div className="mt-5 text-center">
+              <span className="text-xs text-white/50">
+                New to Hauliss?{" "}
+              </span>
+              <button
+                type="button"
+                onClick={onCreateAccount}
+                className="text-xs font-semibold text-[#F97316] hover:text-[#fb923c] transition-colors"
+              >
+                Apply to become a Transporter →
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 p-3 rounded-lg bg-white/5 border border-white/5">
             <p className="text-xs text-white/40 text-center">

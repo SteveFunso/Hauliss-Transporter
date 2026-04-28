@@ -13,6 +13,7 @@ import { Support } from '@/sections/Support';
 import { Settings } from '@/sections/Settings';
 import { Routes } from '@/sections/Routes';
 import Login from '@/sections/Login';
+import Register from '@/sections/Register';
 import { AuthProvider, useAuth } from '@/lib/auth/AuthContext';
 import { Toaster } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
@@ -73,7 +74,9 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <Login />;
+    // Honour ?route=register from marketing-site deep links, plus support
+    // toggling between Login <-> Register via state. Default is Login.
+    return <UnauthenticatedSwitcher />;
   }
 
   const handleToggleSidebar = () => {
@@ -121,6 +124,23 @@ function AppContent() {
       </main>
     </div>
   );
+}
+
+// Switches between Login and Register for unauthenticated users.
+// Initial mode honours ?route=register on the URL (used by the marketing site's
+// "Become a Transporter" CTA) and falls back to Login.
+function UnauthenticatedSwitcher() {
+  const initial =
+    typeof window !== 'undefined' &&
+    window.location.search.includes('route=register')
+      ? 'register'
+      : 'login';
+  const [mode, setMode] = useState<'login' | 'register'>(initial as any);
+
+  if (mode === 'register') {
+    return <Register onBackToLogin={() => setMode('login')} />;
+  }
+  return <Login onCreateAccount={() => setMode('register')} />;
 }
 
 function App() {
