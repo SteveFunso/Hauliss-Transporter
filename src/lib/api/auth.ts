@@ -25,12 +25,21 @@ export async function loginAdmin(
     body: JSON.stringify({ email, password, role: "admin" }),
   });
 
+  const json: any = await res.json().catch(() => ({}));
+
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: "Login failed" }));
-    throw new Error(error.message || "Invalid credentials");
+    throw new Error(json?.message || "Invalid credentials");
   }
 
-  return res.json();
+  // Backend wraps mobile-facing responses in the standard envelope:
+  //   { status_code, message, data: { user_id, access_token, profile, ... } }
+  // Older code paths returned the LoginResponse flat. Accept either so the
+  // client survives the rollover (and any future flip-flops).
+  const payload = (json && json.data) ? json.data : json;
+  if (!payload || !payload.access_token || !payload.profile) {
+    throw new Error(json?.message || "Unexpected login response");
+  }
+  return payload as LoginResponse;
 }
 
 export function logout() {
