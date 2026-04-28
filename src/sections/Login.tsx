@@ -120,12 +120,9 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Demo credentials hint */}
           <div className="mt-6 p-3 rounded-lg bg-white/5 border border-white/5">
             <p className="text-xs text-white/40 text-center">
-              Demo credentials:{" "}
-              <span className="text-white/60">admin@hauliss.ng</span> /{" "}
-              <span className="text-white/60">admin123</span>
+              Authorized personnel only. All access is monitored and logged.
             </p>
           </div>
         </CardContent>
