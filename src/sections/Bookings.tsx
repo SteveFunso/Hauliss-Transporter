@@ -565,7 +565,7 @@ export function Bookings() {
                           <TableCell>
                             <div>
                               <p className="text-sm font-medium">{booking.cargo.category}</p>
-                              <p className="text-xs text-muted-foreground">{booking.cargo.weight}kg</p>
+                              <p className="text-xs text-muted-foreground">{booking.cargo.weight ?? 'N/A'}</p>
                             </div>
                           </TableCell>
                           <TableCell>{getStatusBadge(booking.status)}</TableCell>
@@ -751,7 +751,7 @@ export function Bookings() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Weight</span>
-                      <span className="text-sm font-medium">{selectedBooking.cargo.weight} kg</span>
+                      <span className="text-sm font-medium">{selectedBooking.cargo.weight ?? 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Size</span>

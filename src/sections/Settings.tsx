@@ -111,13 +111,19 @@ export function Settings() {
 
   useEffect(() => {
     if (savedSettings) {
+      // The server returns scalar settings either as a bare string or wrapped in
+      // a {value} envelope, sometimes inconsistently. Tolerate both shapes so a
+      // bare string never blanks the field.
+      const readSetting = (v: any): string =>
+        (typeof v === 'string' ? v : v?.value) ?? '';
+      const s = savedSettings as any;
       setSettings({
-        companyName: savedSettings.platform_name?.value || '',
-        companyEmail: savedSettings.platform_email?.value || '',
-        companyPhone: savedSettings.platform_phone?.value || '',
+        companyName: readSetting(s.platform_name),
+        companyEmail: readSetting(s.platform_email ?? s.contact_email),
+        companyPhone: readSetting(s.platform_phone ?? s.contact_phone),
         companyAddress: '',
-        timezone: savedSettings.timezone?.value || 'Africa/Lagos',
-        currency: savedSettings.currency?.value || 'NGN',
+        timezone: readSetting(s.timezone) || 'Africa/Lagos',
+        currency: readSetting(s.currency) || 'NGN',
         notifications: {
           email: savedSettings.notifications?.email ?? true,
           push: savedSettings.notifications?.push ?? true,
@@ -138,7 +144,6 @@ export function Settings() {
         setIntegrations((prev) => ({ ...prev, ...savedSettings.integrations }));
       }
       // Load API keys from settings if available, otherwise generate initial ones
-      const s = savedSettings as any;
       setLiveApiKey(s.live_api_key || generateApiKey('pk_live_'));
       setTestApiKey(s.test_api_key || generateApiKey('pk_test_'));
     }
@@ -419,7 +424,9 @@ export function Settings() {
                     id="companyAddress"
                     value={settings.companyAddress}
                     onChange={(e) => setSettings({...settings, companyAddress: e.target.value})}
+                    disabled
                   />
+                  <p className="text-xs text-muted-foreground">Not yet available</p>
                 </div>
               </CardContent>
             </Card>
@@ -594,7 +601,8 @@ export function Settings() {
                   </div>
                 </div>
                 <div className="border-t pt-6">
-                  <h4 className="font-medium mb-4">Change Password</h4>
+                  <h4 className="font-medium mb-1">Change Password</h4>
+                  <p className="text-sm text-muted-foreground mb-4">Not yet available</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="newPassword">New Password</Label>
@@ -605,6 +613,7 @@ export function Settings() {
                           placeholder="Enter new password"
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
+                          disabled
                         />
                         <button
                           type="button"
@@ -623,12 +632,14 @@ export function Settings() {
                         placeholder="Confirm new password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
+                        disabled
                       />
                     </div>
                   </div>
                   <Button
                     className="mt-4 bg-[#F97316] hover:bg-[#F97316]/90 text-white"
                     onClick={handleChangePassword}
+                    disabled
                   >
                     Change Password
                   </Button>
@@ -678,23 +689,24 @@ export function Settings() {
                   </div>
                 </div>
                 <div className="border-t pt-6">
-                  <h4 className="font-medium mb-4">Bank Transfer Settings</h4>
+                  <h4 className="font-medium mb-1">Bank Transfer Settings</h4>
+                  <p className="text-sm text-muted-foreground mb-4">Not yet available</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="bankName">Bank Name</Label>
-                      <Input id="bankName" placeholder="Access Bank" />
+                      <Input id="bankName" placeholder="Access Bank" disabled />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="accountNumber">Account Number</Label>
-                      <Input id="accountNumber" placeholder="0123456789" />
+                      <Input id="accountNumber" placeholder="0123456789" disabled />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="accountName">Account Name</Label>
-                      <Input id="accountName" placeholder="Hauliss Logistics Ltd" />
+                      <Input id="accountName" placeholder="Hauliss Logistics Ltd" disabled />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="sortCode">Sort Code</Label>
-                      <Input id="sortCode" placeholder="044150149" />
+                      <Input id="sortCode" placeholder="044150149" disabled />
                     </div>
                   </div>
                 </div>
