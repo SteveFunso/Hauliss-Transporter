@@ -98,7 +98,7 @@ export function Users() {
   // Dialog states
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [addUserLoading, setAddUserLoading] = useState(false);
-  const [addUserForm, setAddUserForm] = useState({ full_name: '', email: '', phone_number: '', role: 'support', password: '' });
+  const [addUserForm, setAddUserForm] = useState({ full_name: '', email: '', phone_number: '', role: 'client', password: '' });
 
   const [viewProfileUser, setViewProfileUser] = useState<AdminUser | null>(null);
 
@@ -170,11 +170,11 @@ export function Users() {
         password: addUserForm.password,
         full_name: addUserForm.full_name,
         phone_number: addUserForm.phone_number || undefined,
-        role: addUserForm.role || 'support',
+        role: addUserForm.role || 'client',
       });
       toast.success(`User "${addUserForm.full_name}" created successfully`);
       setAddUserOpen(false);
-      setAddUserForm({ full_name: '', email: '', phone_number: '', role: 'support', password: '' });
+      setAddUserForm({ full_name: '', email: '', phone_number: '', role: 'client', password: '' });
       refetch();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create user');

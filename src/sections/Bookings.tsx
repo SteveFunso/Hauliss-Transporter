@@ -52,12 +52,12 @@ import { useAddressAutocomplete } from '@/hooks/useAddressAutocomplete';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
 import { getBookings, getBookingStats, updateBookingStatus, createBooking, type AdminBooking } from '@/lib/api/bookings';
+import { getTruckTypes, type TruckType } from '@/lib/api/fleet';
 import type { ApiResponse } from '@/lib/api/client';
 import { toast } from 'sonner';
 
 const CARGO_TYPES = ['Electronics', 'Building Materials', 'Furniture', 'Agricultural', 'Consumer Goods', 'Industrial'];
 const CARGO_WEIGHTS = ['light', 'medium', 'heavy'];
-const TRUCK_TYPES = ['Flatbed', 'Box Truck', 'Refrigerated', 'Tanker', 'Tipper', 'Trailer'];
 
 type NewBookingForm = {
   pickupAddress: string;
@@ -117,6 +117,9 @@ export function Bookings() {
     []
   );
 
+  const { data: truckTypesData } = useApi(() => getTruckTypes(), []);
+  const truckTypes: TruckType[] = Array.isArray(truckTypesData) ? truckTypesData : [];
+
   // Sync pagination total when data arrives
   useEffect(() => {
     if (bookingsData?.pagination) {
@@ -173,12 +176,16 @@ export function Bookings() {
     switch (status.toLowerCase()) {
       case 'pending':
         return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">Pending</Badge>;
+      case 'scheduled':
+        return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Scheduled</Badge>;
       case 'confirmed':
         return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Confirmed</Badge>;
-      case 'in_progress':
+      case 'in_transit':
         return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">In Progress</Badge>;
       case 'completed':
         return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Completed</Badge>;
+      case 'paid':
+        return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Paid</Badge>;
       case 'cancelled':
         return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Cancelled</Badge>;
       default:
@@ -277,8 +284,8 @@ export function Bookings() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="">Select truck type</option>
-                {TRUCK_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                {truckTypes.map((tt) => (
+                  <option key={tt.id} value={tt.id}>{tt.name}</option>
                 ))}
               </select>
             </div>
@@ -332,11 +339,13 @@ export function Bookings() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="PENDING">Pending</option>
+                <option value="SCHEDULED">Scheduled</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="IN_TRANSIT">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="PAID">Paid</option>
+                <option value="CANCELLED">Cancelled</option>
               </select>
             </div>
             <div className="grid gap-2">
@@ -471,11 +480,13 @@ export function Bookings() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="PENDING">Pending</option>
+                <option value="SCHEDULED">Scheduled</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="IN_TRANSIT">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="PAID">Paid</option>
+                <option value="CANCELLED">Cancelled</option>
               </select>
               <Button variant="outline" size="icon" onClick={() => setFilterOpen(true)}>
                 <Filter className="w-4 h-4" />
@@ -783,7 +794,7 @@ export function Bookings() {
                   {selectedBooking.status.toLowerCase() === 'confirmed' && (
                     <Button
                       className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                      onClick={() => handleStatusUpdate(selectedBooking.id, 'IN_PROGRESS')}
+                      onClick={() => handleStatusUpdate(selectedBooking.id, 'IN_TRANSIT')}
                       disabled={actionLoading === selectedBooking.id}
                     >
                       {actionLoading === selectedBooking.id ? (
@@ -794,7 +805,7 @@ export function Bookings() {
                       Mark In Progress
                     </Button>
                   )}
-                  {selectedBooking.status.toLowerCase() === 'in_progress' && (
+                  {selectedBooking.status.toLowerCase() === 'in_transit' && (
                     <Button
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                       onClick={() => handleStatusUpdate(selectedBooking.id, 'COMPLETED')}

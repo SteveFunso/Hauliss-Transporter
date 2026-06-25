@@ -122,9 +122,9 @@ export function Settings() {
           email: savedSettings.notifications?.email ?? true,
           push: savedSettings.notifications?.push ?? true,
           sms: savedSettings.notifications?.sms ?? false,
-          bookingUpdates: true,
-          driverAlerts: true,
-          paymentNotifications: true,
+          bookingUpdates: savedSettings.notifications?.booking_updates ?? true,
+          driverAlerts: savedSettings.notifications?.driver_alerts ?? true,
+          paymentNotifications: savedSettings.notifications?.payment_notifications ?? true,
         },
         security: {
           twoFactor: savedSettings.security?.two_factor ?? true,
@@ -157,6 +157,9 @@ export function Settings() {
           email: settings.notifications.email,
           push: settings.notifications.push,
           sms: settings.notifications.sms,
+          booking_updates: settings.notifications.bookingUpdates,
+          driver_alerts: settings.notifications.driverAlerts,
+          payment_notifications: settings.notifications.paymentNotifications,
         },
         security: {
           two_factor: settings.security.twoFactor,
@@ -255,6 +258,9 @@ export function Settings() {
           email: newNotifications.email,
           push: newNotifications.push,
           sms: newNotifications.sms,
+          booking_updates: newNotifications.bookingUpdates,
+          driver_alerts: newNotifications.driverAlerts,
+          payment_notifications: newNotifications.paymentNotifications,
         },
       });
       toast.success(`${key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())} ${checked ? 'enabled' : 'disabled'}`);

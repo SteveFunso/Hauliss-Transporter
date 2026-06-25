@@ -94,6 +94,13 @@ export function Fleet() {
   const paginationMeta = (data as any)?.pagination;
   const truckTypes: TruckType[] = Array.isArray(truckTypesData) ? truckTypesData : [];
 
+  // Build Type filter options from the DISTINCT vehicle_type values actually
+  // present in the fleet rows, so the filter compares like-with-like (the
+  // catalog display names may differ from the value stored on the truck).
+  const fleetVehicleTypes = Array.from(
+    new Set(fleetList.map((d) => d.vehicle_type).filter((v): v is string => !!v))
+  ).sort();
+
   // Sync pagination total when API response arrives
   useEffect(() => {
     if (paginationMeta?.total) {
@@ -306,6 +313,12 @@ export function Fleet() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="">Select type...</option>
+                {/* Keep the row's existing value selectable even if it isn't a
+                    catalog name, so opening Edit doesn't blank the field. */}
+                {editForm.vehicle_type &&
+                  !truckTypes.some((tt) => tt.name === editForm.vehicle_type) && (
+                    <option value={editForm.vehicle_type}>{getTruckTypeLabel(editForm.vehicle_type)}</option>
+                  )}
                 {truckTypes.map((tt) => (
                   <option key={tt.id} value={tt.name}>{tt.name}</option>
                 ))}
@@ -485,8 +498,8 @@ export function Fleet() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="all">All Types</option>
-                {truckTypes.map((tt) => (
-                  <option key={tt.id} value={tt.name}>{tt.name}</option>
+                {fleetVehicleTypes.map((vt) => (
+                  <option key={vt} value={vt}>{getTruckTypeLabel(vt)}</option>
                 ))}
               </select>
               <Button variant="outline" size="icon" onClick={() => toast.info('Advanced filters — view details')}>

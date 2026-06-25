@@ -24,6 +24,9 @@ export type PlatformSettings = {
     email: boolean;
     push: boolean;
     sms: boolean;
+    booking_updates?: boolean;
+    driver_alerts?: boolean;
+    payment_notifications?: boolean;
   };
   security: {
     two_factor: boolean;
@@ -51,7 +54,14 @@ export type PlatformSettingsUpdate = Partial<{
   flutterwave_enabled: boolean;
   integrations: Record<string, boolean>;
   role_permissions: Record<string, Record<string, boolean>>;
-  notifications: { email: boolean; push: boolean; sms: boolean };
+  notifications: {
+    email: boolean;
+    push: boolean;
+    sms: boolean;
+    booking_updates: boolean;
+    driver_alerts: boolean;
+    payment_notifications: boolean;
+  };
   security: { two_factor: boolean; session_timeout: number; password_expiry: number };
 }>;
 
