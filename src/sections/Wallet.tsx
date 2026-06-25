@@ -160,11 +160,14 @@ export function Wallet() {
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'success':
         return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Completed</Badge>;
       case 'pending':
         return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">Pending</Badge>;
       case 'failed':
         return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Failed</Badge>;
+      case 'refunded':
+        return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Refunded</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -205,7 +208,6 @@ export function Wallet() {
 
   const totalRevenue = stats ? stats.total_amount / 100 : 0;
   const pendingCount = stats?.pending ?? 0;
-  const completedCount = stats?.completed ?? 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -367,7 +369,7 @@ export function Wallet() {
 
         <Card
           className="border-0 shadow-sm bg-gradient-to-br from-emerald-500/5 to-transparent cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => { setStatusFilter('completed'); pagination.setPage(1); toast.info("Filtering completed payments"); }}
+          onClick={() => { setStatusFilter('success'); pagination.setPage(1); toast.info("Filtering paid payments"); }}
         >
           <CardHeader className="pb-3">
             <CardTitle className="font-display font-semibold text-base text-muted-foreground flex items-center gap-2">
@@ -380,7 +382,7 @@ export function Wallet() {
             ) : (
               <p className="text-3xl font-bold text-emerald-600">{formatCurrency(totalRevenue)}</p>
             )}
-            <p className="text-sm text-muted-foreground mt-2">{completedCount} completed payments</p>
+            <p className="text-sm text-muted-foreground mt-2">All paid revenue</p>
           </CardContent>
         </Card>
 
@@ -424,9 +426,11 @@ export function Wallet() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="all">All Status</option>
+                <option value="success">Paid</option>
                 <option value="completed">Completed</option>
                 <option value="pending">Pending</option>
                 <option value="failed">Failed</option>
+                <option value="refunded">Refunded</option>
               </select>
             </div>
           </div>
@@ -503,7 +507,7 @@ export function Wallet() {
                       <TableCell>
                         <span className={cn(
                           'font-medium',
-                          payment.status.toLowerCase() === 'completed'
+                          ['completed', 'success'].includes(payment.status.toLowerCase())
                             ? 'text-emerald-600'
                             : payment.status.toLowerCase() === 'failed'
                             ? 'text-red-600'
@@ -532,7 +536,7 @@ export function Wallet() {
                             <DropdownMenuItem onClick={() => downloadReceipt(payment)}>
                               <Download className="w-4 h-4 mr-2" /> Download Receipt
                             </DropdownMenuItem>
-                            {payment.status.toLowerCase() === 'completed' && (
+                            {['completed', 'success'].includes(payment.status.toLowerCase()) && (
                               <DropdownMenuItem
                                 className="text-red-600"
                                 onClick={() => openRefundConfirm(payment)}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Route,
   MapPin,
@@ -47,6 +47,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MapView } from '@/components/ui/map-view';
+import { useAddressAutocomplete } from '@/hooks/useAddressAutocomplete';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
 import {
@@ -136,6 +138,38 @@ function ServiceRoutesTab() {
   const [formData, setFormData] = useState(defaultRouteForm);
   const [submitting, setSubmitting] = useState(false);
 
+  // Geocoded coordinates for map preview
+  const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  const originInputRef = useRef<HTMLInputElement>(null);
+  const destInputRef = useRef<HTMLInputElement>(null);
+
+  useAddressAutocomplete(originInputRef, (place) => {
+    setFormData((prev) => ({ ...prev, origin_address: place.address }));
+    setOriginCoords({ lat: place.lat, lng: place.lng });
+  });
+
+  useAddressAutocomplete(destInputRef, (place) => {
+    setFormData((prev) => ({ ...prev, destination_address: place.address }));
+    setDestCoords({ lat: place.lat, lng: place.lng });
+  });
+
+  // Build route map markers
+  const routeMapMarkers = useMemo(() => {
+    const m: Array<{ lat: number; lng: number; label?: string; color?: string }> = [];
+    if (originCoords) m.push({ ...originCoords, label: 'Origin', color: 'green' });
+    if (destCoords) m.push({ ...destCoords, label: 'Destination', color: 'red' });
+    return m;
+  }, [originCoords, destCoords]);
+
+  const routeMapRoute = useMemo(() => {
+    if (originCoords && destCoords) {
+      return { origin: originCoords, destination: destCoords };
+    }
+    return undefined;
+  }, [originCoords, destCoords]);
+
   useEffect(() => {
     if (data) {
       const list = Array.isArray(data) ? data : (data as any).data ?? [];
@@ -163,6 +197,8 @@ function ServiceRoutesTab() {
     setShowForm(false);
     setEditingRoute(null);
     setFormData(defaultRouteForm);
+    setOriginCoords(null);
+    setDestCoords(null);
   };
 
   const handleSubmit = async () => {
@@ -418,6 +454,7 @@ function ServiceRoutesTab() {
             <div className="space-y-2">
               <Label>Origin Address</Label>
               <Input
+                ref={originInputRef}
                 placeholder="e.g., Apapa Port, Lagos"
                 value={formData.origin_address}
                 onChange={(e) => setFormData({ ...formData, origin_address: e.target.value })}
@@ -426,11 +463,19 @@ function ServiceRoutesTab() {
             <div className="space-y-2">
               <Label>Destination Address</Label>
               <Input
+                ref={destInputRef}
                 placeholder="e.g., Kubwa Industrial Zone, Abuja"
                 value={formData.destination_address}
                 onChange={(e) => setFormData({ ...formData, destination_address: e.target.value })}
               />
             </div>
+            {routeMapMarkers.length > 0 && (
+              <MapView
+                height="200px"
+                markers={routeMapMarkers}
+                route={routeMapRoute}
+              />
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Distance (km)</Label>

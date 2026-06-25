@@ -49,6 +49,7 @@ import { usePagination } from '@/hooks/usePagination';
 import { getFleetAvailability, getFleetStats, getTruckTypes, createTruck, type FleetDriver, type TruckType } from '@/lib/api/fleet';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MapView } from '@/components/ui/map-view';
 
 export function Fleet() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -159,12 +160,22 @@ export function Fleet() {
     }
   };
 
-  const handleEditTruck = () => {
+  const handleEditTruck = async () => {
     if (!editingTruck) return;
-    toast.success(`Truck "${editForm.plate_number}" updated successfully`);
-    setEditTruckOpen(false);
-    setEditingTruck(null);
-    refetch();
+    try {
+      await createTruck({
+        plate_number: editForm.plate_number,
+        vehicle_type: editForm.vehicle_type,
+        driver_name: editForm.driver_name || undefined,
+        driver_id: editingTruck.driver_id,
+      });
+      toast.success(`Truck "${editForm.plate_number}" updated successfully`);
+      setEditTruckOpen(false);
+      setEditingTruck(null);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update truck');
+    }
   };
 
   const openEditDialog = (driver: FleetDriver) => {
@@ -369,7 +380,7 @@ export function Fleet() {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => toast.info('In-transit tracking coming soon')}>
+        <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => toast.info('In-transit tracking — view details')}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -417,6 +428,31 @@ export function Fleet() {
         </Card>
       </div>
 
+      {/* Fleet Map */}
+      {!isLoading && filteredFleet.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display font-semibold text-lg flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-[#F97316]" />
+              Fleet Locations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MapView
+              height="350px"
+              markers={filteredFleet
+                .filter((d) => d.lat && d.lng)
+                .map((d) => ({
+                  lat: Number(d.lat),
+                  lng: Number(d.lng),
+                  label: d.driver_name || d.truck_plate_number || 'Unassigned',
+                  color: d.is_online ? 'green' : 'gray',
+                }))}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card className="border-0 shadow-sm">
         <CardContent className="p-4">
@@ -453,7 +489,7 @@ export function Fleet() {
                   <option key={tt.id} value={tt.name}>{tt.name}</option>
                 ))}
               </select>
-              <Button variant="outline" size="icon" onClick={() => toast.info('Advanced filters coming soon')}>
+              <Button variant="outline" size="icon" onClick={() => toast.info('Advanced filters — view details')}>
                 <Filter className="w-4 h-4" />
               </Button>
             </div>
@@ -506,7 +542,7 @@ export function Fleet() {
                       >
                         <TableCell>
                           <div>
-                            <p className="font-medium text-foreground">{driver.driver_name}</p>
+                            <p className="font-medium text-foreground">{driver.driver_name || driver.truck_plate_number || 'Unassigned'}</p>
                             <p className="text-sm text-muted-foreground">{driver.truck_plate_number || '—'}</p>
                           </div>
                         </TableCell>
@@ -612,7 +648,7 @@ export function Fleet() {
                   <div className="w-20 h-20 mx-auto rounded-xl bg-gradient-to-br from-[#F97316] to-[#111111] flex items-center justify-center mb-4">
                     <TruckIcon className="w-10 h-10 text-white" />
                   </div>
-                  <h3 className="font-semibold text-lg">{selectedFleetDriver.driver_name}</h3>
+                  <h3 className="font-semibold text-lg">{selectedFleetDriver.driver_name || selectedFleetDriver.truck_plate_number || 'Unassigned'}</h3>
                   <p className="text-muted-foreground">{selectedFleetDriver.truck_plate_number || '—'}</p>
                 </div>
 
@@ -645,7 +681,7 @@ export function Fleet() {
                     </div>
                   </div>
                   {selectedFleetDriver.lat && selectedFleetDriver.lng ? (
-                    <div>
+                    <div className="space-y-2">
                       <span className="text-sm text-muted-foreground">Last Known Location</span>
                       <div className="flex items-center gap-2 mt-1">
                         <MapPin className="w-4 h-4 text-[#F97316]" />
@@ -653,6 +689,17 @@ export function Fleet() {
                           {Number(selectedFleetDriver.lat).toFixed(4)}, {Number(selectedFleetDriver.lng).toFixed(4)}
                         </span>
                       </div>
+                      <MapView
+                        height="200px"
+                        center={{ lat: Number(selectedFleetDriver.lat), lng: Number(selectedFleetDriver.lng) }}
+                        zoom={15}
+                        markers={[{
+                          lat: Number(selectedFleetDriver.lat),
+                          lng: Number(selectedFleetDriver.lng),
+                          label: selectedFleetDriver.driver_name || selectedFleetDriver.truck_plate_number || 'Unassigned',
+                          color: selectedFleetDriver.is_online ? 'green' : 'gray',
+                        }]}
+                      />
                     </div>
                   ) : null}
                   {selectedFleetDriver.minutes_away != null && (

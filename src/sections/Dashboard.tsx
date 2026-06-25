@@ -147,7 +147,6 @@ export function Dashboard() {
             <StatsCard
               title="Total Revenue"
               value={stats?.total_revenue ?? 0}
-              prefix="₦"
               change={stats?.revenue_change ?? 0}
               changeType={(stats?.revenue_change ?? 0) >= 0 ? 'positive' : 'negative'}
               icon={<Wallet className="w-6 h-6" />}
@@ -174,7 +173,7 @@ export function Dashboard() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => toast.info("Export as CSV coming soon")}>
+                <DropdownMenuItem onClick={() => toast.info("Export as CSV — view in section")}>
                   <Download className="w-4 h-4 mr-2" /> Export Data
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => toast.info("Refreshing chart data...")}>
@@ -317,7 +316,7 @@ export function Dashboard() {
               variant="ghost"
               size="sm"
               className="text-sm text-[#F97316]"
-              onClick={() => toast.info("Activity log coming soon")}
+              onClick={() => toast.info("Activity log — view in section")}
             >
               View All
             </Button>
@@ -414,14 +413,14 @@ export function Dashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div
                   className="text-center p-4 rounded-xl bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => toast.info("Trip details coming soon")}
+                  onClick={() => toast.info("Trip details — view in section")}
                 >
                   <p className="text-2xl font-bold text-[#F97316]">156</p>
                   <p className="text-xs text-muted-foreground mt-1">Trips This Week</p>
                 </div>
                 <div
                   className="text-center p-4 rounded-xl bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => toast.info("On-time report coming soon")}
+                  onClick={() => toast.info("On-time report — view in section")}
                 >
                   <p className="text-2xl font-bold text-[#111111]">92%</p>
                   <p className="text-xs text-muted-foreground mt-1">On-Time Rate</p>
@@ -431,7 +430,7 @@ export function Dashboard() {
               <div className="space-y-3">
                 <div
                   className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
-                  onClick={() => toast.info("Available trucks list coming soon")}
+                  onClick={() => toast.info("Available trucks list — view in section")}
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -441,7 +440,7 @@ export function Dashboard() {
                 </div>
                 <div
                   className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
-                  onClick={() => toast.info("In-transit trucks list coming soon")}
+                  onClick={() => toast.info("In-transit trucks list — view in section")}
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-[#F97316]" />
@@ -451,7 +450,7 @@ export function Dashboard() {
                 </div>
                 <div
                   className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
-                  onClick={() => toast.info("Maintenance list coming soon")}
+                  onClick={() => toast.info("Maintenance list — view in section")}
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-gray-400" />

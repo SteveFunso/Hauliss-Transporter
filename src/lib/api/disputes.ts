@@ -7,7 +7,7 @@ export type AdminDispute = {
   description: string;
   evidence_url: string;
   status: string;
-  submitted_at: number;
+  submitted_at: number | string;
 };
 
 export type DisputeListParams = {
@@ -26,3 +26,10 @@ export const getDisputes = (params: DisputeListParams = {}) => {
 
 export const updateDispute = (id: string, data: { status?: string; response?: string }) =>
   api.patch<{ message: string }>(`/api/admin/disputes/${id}`, data);
+
+export const createDispute = (data: {
+  trip_id: string;
+  issue_type: string;
+  description: string;
+  evidence_url?: string;
+}) => api.post<{ dispute_id: string; message: string }>("/api/disputes/submit", data);

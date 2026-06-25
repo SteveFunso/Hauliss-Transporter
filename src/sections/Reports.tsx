@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Download,
   FileText,
-  BarChart3,
   TrendingUp,
   Users,
   Truck,
@@ -34,7 +33,6 @@ const reportTypes = [
   { id: 'revenue', name: 'Revenue Report', icon: Wallet, color: 'bg-emerald-100 text-emerald-600' },
   { id: 'fleet', name: 'Fleet Utilization', icon: Truck, color: 'bg-blue-100 text-blue-600' },
   { id: 'drivers', name: 'Driver Performance', icon: Users, color: 'bg-purple-100 text-purple-600' },
-  { id: 'operations', name: 'Operations Summary', icon: BarChart3, color: 'bg-amber-100 text-amber-600' },
 ];
 
 export function Reports() {
@@ -206,8 +204,8 @@ export function Reports() {
         <Card className="border-0 shadow-sm">
           <CardHeader>
             <CardTitle className="font-display font-semibold text-lg flex items-center justify-between">
-              <span>Truck Type Distribution</span>
-              {stats && (
+              <span>{selectedReport === 'drivers' ? 'Driver Rating Distribution' : 'Truck Type Distribution'}</span>
+              {selectedReport !== 'drivers' && stats && (
                 <Badge className="bg-blue-100 text-blue-700">{stats.total_trucks} Total</Badge>
               )}
             </CardTitle>
@@ -222,7 +220,7 @@ export function Reports() {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={fleetData?.data || []}>
+                  <BarChart data={(selectedReport === 'drivers' ? driverData?.data : fleetData?.data) || []}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="name" stroke="#888" fontSize={12} />
                     <YAxis stroke="#888" fontSize={12} />

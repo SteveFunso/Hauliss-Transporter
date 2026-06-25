@@ -78,17 +78,21 @@ export type SignupResult = {
 export const submitTransporterSignup = (payload: SignupPayload) =>
   publicPost<SignupResult>("/api/transporter/signup", payload);
 
-// Document upload — uses the existing /api/upload endpoint that the rest of
-// the platform uses. Returns the public URL of the uploaded file.
+// Document upload for the KYC signup flow. This calls the dedicated
+// public /api/upload/kyc endpoint on the documents service — *unlike* the
+// authenticated /api/upload/document endpoint, it does NOT require a
+// Bearer token (applicants don't have one yet — that's why they're applying).
+// Returns the public URL of the uploaded placeholder.
 export async function uploadKycFile(file: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(`${API_BASE_URL}/api/upload`, {
+  fd.append("file_type", "kyc");
+  const res = await fetch(`${API_BASE_URL}/api/upload/kyc`, {
     method: "POST",
     body: fd,
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.message || `Upload failed (${res.status})`);
-  // Standard envelope { data: { url } } OR plain { url }
-  return json?.data?.url || json?.url || json?.data?.file_url || "";
+  // Backend returns { url, file_url, file_type } — accept either shape.
+  return json?.url || json?.file_url || json?.data?.url || "";
 }

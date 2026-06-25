@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApi } from '@/hooks/useApi';
-import { getTruckTypes, type TruckType } from '@/lib/api/fleet';
+import { getTruckTypes, updateTruckType, deleteTruckType, createTruckType, type TruckType } from '@/lib/api/fleet';
 import { getSettings, updateSettings } from '@/lib/api/settings';
 import { toast } from 'sonner';
 
@@ -55,6 +55,9 @@ export function Pricing() {
   const [savingCommission, setSavingCommission] = useState(false);
   const [formData, setFormData] = useState(defaultFormData);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [formSaving, setFormSaving] = useState(false);
+  const [toggleLoading, setToggleLoading] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     if (Array.isArray(truckTypes)) {
@@ -69,21 +72,35 @@ export function Pricing() {
     }
   }, [settings]);
 
-  const handleToggleActive = (id: string) => {
-    setConfigs(prev => prev.map(config => {
-      if (config.id === id) {
-        const newActive = !config.active;
-        toast.success(`Status updated to ${newActive ? 'Active' : 'Inactive'}`);
-        return { ...config, active: newActive };
-      }
-      return config;
-    }));
+  const handleToggleActive = async (id: string) => {
+    const config = configs.find(c => c.id === id);
+    if (!config) return;
+    const newActive = !config.active;
+    setToggleLoading(id);
+    try {
+      await updateTruckType(id, { is_available: newActive });
+      setConfigs(prev => prev.map(c => c.id === id ? { ...c, active: newActive } : c));
+      toast.success(`Status updated to ${newActive ? 'Active' : 'Inactive'}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update status');
+    } finally {
+      setToggleLoading(null);
+    }
   };
 
-  const handleDeleteConfirm = (id: string) => {
-    setConfigs(prev => prev.filter(config => config.id !== id));
-    toast.success('Pricing removed');
-    setDeleteConfirmId(null);
+  const handleDeleteConfirm = async (id: string) => {
+    setDeleteLoading(true);
+    try {
+      await deleteTruckType(id);
+      setConfigs(prev => prev.filter(config => config.id !== id));
+      toast.success('Pricing removed');
+      setDeleteConfirmId(null);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete pricing');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleOpenEdit = (config: PricingConfig) => {
@@ -98,25 +115,42 @@ export function Pricing() {
     });
   };
 
-  const handleFormSubmit = () => {
+  const handleFormSubmit = async () => {
     if (!formData.name.trim()) {
       toast.error('Please enter a pricing name');
       return;
     }
-    if (editingConfig) {
-      setConfigs(prev => prev.map(c =>
-        c.id === editingConfig.id
-          ? { ...c, name: formData.name, base_price: Number(formData.basePrice), min_price: Number(formData.minPrice), max_price: Number(formData.maxPrice), capacity: formData.capacity }
-          : c
-      ));
-      toast.success('Pricing updated');
-    } else {
-      toast.success('Pricing configuration created');
+    setFormSaving(true);
+    try {
+      if (editingConfig) {
+        await updateTruckType(editingConfig.id, {
+          name: formData.name,
+          base_price: Number(formData.basePrice),
+          min_price: Number(formData.minPrice),
+          max_price: Number(formData.maxPrice),
+          capacity: formData.capacity,
+        });
+        toast.success('Pricing updated');
+      } else {
+        await createTruckType({
+          name: formData.name,
+          capacity: formData.capacity,
+          base_price: Number(formData.basePrice),
+          min_price: Number(formData.minPrice),
+          max_price: Number(formData.maxPrice),
+          is_available: true,
+        });
+        toast.success('Pricing configuration created');
+      }
+      setShowForm(false);
+      setEditingConfig(null);
+      setFormData(defaultFormData);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save pricing');
+    } finally {
+      setFormSaving(false);
     }
-    setShowForm(false);
-    setEditingConfig(null);
-    setFormData(defaultFormData);
-    refetch();
   };
 
   const handleSaveCommission = async () => {
@@ -226,10 +260,11 @@ export function Pricing() {
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={config.active}
+                          disabled={toggleLoading === config.id}
                           onCheckedChange={() => handleToggleActive(config.id)}
                         />
                         <Badge className={config.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'}>
-                          {config.active ? 'Active' : 'Inactive'}
+                          {toggleLoading === config.id ? '...' : (config.active ? 'Active' : 'Inactive')}
                         </Badge>
                       </div>
                     </TableCell>
@@ -329,7 +364,7 @@ export function Pricing() {
                 <p className="text-sm text-muted-foreground">Minimum balance to withdraw</p>
               </div>
               <span className="text-lg font-bold">
-                ₦{(typeof settings?.min_payout === 'object' ? (settings.min_payout as any)?.value : settings?.min_payout ?? 5000).toLocaleString()}
+                ₦{(((typeof settings?.min_payout === 'object' ? (settings.min_payout as any)?.value : settings?.min_payout) ?? 500000) / 100).toLocaleString()}
               </span>
             </div>
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
@@ -338,7 +373,7 @@ export function Pricing() {
                 <p className="text-sm text-muted-foreground">Fee per withdrawal</p>
               </div>
               <span className="text-lg font-bold">
-                ₦{(typeof settings?.payout_fee === 'object' ? (settings.payout_fee as any)?.value : settings?.payout_fee ?? 50).toLocaleString()}
+                ₦{(((typeof settings?.payout_fee === 'object' ? (settings.payout_fee as any)?.value : settings?.payout_fee) ?? 5000) / 100).toLocaleString()}
               </span>
             </div>
           </CardContent>
@@ -417,11 +452,11 @@ export function Pricing() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowForm(false); setEditingConfig(null); setFormData(defaultFormData); }}>
+            <Button variant="outline" onClick={() => { setShowForm(false); setEditingConfig(null); setFormData(defaultFormData); }} disabled={formSaving}>
               Cancel
             </Button>
-            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleFormSubmit}>
-              {editingConfig ? 'Update' : 'Create'}
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleFormSubmit} disabled={formSaving}>
+              {formSaving ? 'Saving...' : (editingConfig ? 'Update' : 'Create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -435,9 +470,9 @@ export function Pricing() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">Are you sure you want to remove this pricing configuration? This action cannot be undone.</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteConfirmId && handleDeleteConfirm(deleteConfirmId)}>
-              Delete
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)} disabled={deleteLoading}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteConfirmId && handleDeleteConfirm(deleteConfirmId)} disabled={deleteLoading}>
+              {deleteLoading ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

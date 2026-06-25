@@ -27,13 +27,20 @@ export type PaymentListParams = {
   search?: string;
 };
 
-export const getPayments = (params: PaymentListParams = {}) => {
+export const getPayments = async (params: PaymentListParams = {}) => {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.status && params.status !== "all") qs.set("status", params.status);
   if (params.search) qs.set("search", params.search);
-  return api.get<ApiResponse<AdminPayment[]>>(`/api/admin/payments?${qs}`);
+  const res = await api.get<ApiResponse<AdminPayment[]>>(`/api/admin/payments?${qs}`);
+  return {
+    ...res,
+    data: (res.data ?? []).map((r) => ({
+      ...r,
+      amount_minor_units: Number(r.amount_minor_units),
+    })),
+  };
 };
 
 export const getPaymentStats = () =>

@@ -49,7 +49,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getDisputes, updateDispute, type AdminDispute } from '@/lib/api/disputes';
+import { getDisputes, updateDispute, createDispute, type AdminDispute } from '@/lib/api/disputes';
 import { toast } from 'sonner';
 
 export function Support() {
@@ -58,7 +58,9 @@ export function Support() {
   const [selectedTicket, setSelectedTicket] = useState<AdminDispute | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
   const [showNewTicketDialog, setShowNewTicketDialog] = useState(false);
-  const [newTicket, setNewTicket] = useState({ subject: '', description: '', issueType: 'general', priority: 'medium' });
+  const [newTicket, setNewTicket] = useState({ subject: '', description: '', issueType: 'general', priority: 'medium', tripId: '' });
+  const [ticketSubmitting, setTicketSubmitting] = useState(false);
+  const [callCenterOpen, setCallCenterOpen] = useState(false);
   const replyRef = useRef<HTMLTextAreaElement>(null);
 
   const pagination = usePagination(20);
@@ -86,7 +88,7 @@ export function Support() {
 
   // Compute stats from loaded data
   const openCount = disputes.filter(d => d.status === 'open' || d.status === 'pending').length;
-  const inProgressCount = disputes.filter(d => d.status === 'in_progress').length;
+  const inProgressCount = disputes.filter(d => d.status === 'investigating').length;
   const resolvedCount = disputes.filter(d => d.status === 'resolved').length;
 
   const getStatusBadge = (status: string) => {
@@ -95,6 +97,7 @@ export function Support() {
       case 'pending':
         return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Open</Badge>;
       case 'in_progress':
+      case 'investigating':
         return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">In Progress</Badge>;
       case 'resolved':
         return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Resolved</Badge>;
@@ -172,15 +175,35 @@ export function Support() {
     }
   };
 
-  const handleNewTicketSubmit = () => {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  const handleNewTicketSubmit = async () => {
     if (!newTicket.subject.trim() || !newTicket.description.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
-    toast.success('Support ticket created');
-    setShowNewTicketDialog(false);
-    setNewTicket({ subject: '', description: '', issueType: 'general', priority: 'medium' });
-    refetch();
+    // The disputes endpoint requires a real trip UUID. Validate up-front so we
+    // don't fire a request that always 400s with a synthetic id.
+    if (!UUID_RE.test(newTicket.tripId.trim())) {
+      toast.error('A valid Trip ID (UUID) is required to submit a ticket');
+      return;
+    }
+    setTicketSubmitting(true);
+    try {
+      await createDispute({
+        trip_id: newTicket.tripId.trim(),
+        issue_type: newTicket.issueType,
+        description: `[${newTicket.priority.toUpperCase()}] ${newTicket.subject}\n\n${newTicket.description}`,
+      });
+      toast.success('Support ticket created');
+      setShowNewTicketDialog(false);
+      setNewTicket({ subject: '', description: '', issueType: 'general', priority: 'medium', tripId: '' });
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create ticket');
+    } finally {
+      setTicketSubmitting(false);
+    }
   };
 
   const handleViewDetailsAndReply = (ticket: AdminDispute) => {
@@ -188,9 +211,9 @@ export function Support() {
     setTimeout(() => replyRef.current?.focus(), 100);
   };
 
-  const formatTimestamp = (ts: number) => {
-    // submitted_at is in milliseconds
-    return new Date(ts).toLocaleDateString();
+  const formatTimestamp = (ts: number | string) => {
+    // submitted_at is epoch-milliseconds, sometimes serialized as a string
+    return new Date(Number(ts)).toLocaleDateString();
   };
 
   return (
@@ -204,7 +227,7 @@ export function Support() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => toast.info('Connecting to call center...')}>
+          <Button variant="outline" className="gap-2" onClick={() => setCallCenterOpen(true)}>
             <Phone className="w-4 h-4" />
             Call Center
           </Button>
@@ -317,9 +340,8 @@ export function Support() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="all">All Status</option>
-                <option value="open">Open</option>
                 <option value="pending">Pending</option>
-                <option value="in_progress">In Progress</option>
+                <option value="investigating">In Progress</option>
                 <option value="resolved">Resolved</option>
                 <option value="closed">Closed</option>
               </select>
@@ -530,7 +552,7 @@ export function Support() {
                 <div>
                   <h4 className="font-medium mb-2">Submitted</h4>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(selectedTicket.submitted_at).toLocaleString()}
+                    {new Date(Number(selectedTicket.submitted_at)).toLocaleString()}
                   </p>
                 </div>
 
@@ -586,6 +608,49 @@ export function Support() {
         </div>
       </div>
 
+      {/* Call Center Dialog */}
+      <Dialog open={callCenterOpen} onOpenChange={setCallCenterOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-display font-semibold">Call Center</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Contact our support team directly via phone.
+            </p>
+            <div className="p-4 rounded-lg bg-muted/50 text-center space-y-2">
+              <p className="font-medium text-lg">Support Hotline</p>
+              <a
+                href="tel:+2348001234567"
+                className="text-2xl font-bold text-[#F97316] hover:underline"
+              >
+                +234 800 123 4567
+              </a>
+              <p className="text-xs text-muted-foreground">Available Mon-Fri, 8am - 6pm WAT</p>
+            </div>
+            <div className="p-4 rounded-lg bg-muted/50 text-center space-y-2">
+              <p className="font-medium text-lg">Emergency Line</p>
+              <a
+                href="tel:+2349001234567"
+                className="text-2xl font-bold text-[#F97316] hover:underline"
+              >
+                +234 900 123 4567
+              </a>
+              <p className="text-xs text-muted-foreground">24/7 for urgent issues</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCallCenterOpen(false)}>Close</Button>
+            <Button
+              className="bg-[#F97316] hover:bg-[#F97316]/90 text-white gap-2"
+              onClick={() => window.open('tel:+2348001234567')}
+            >
+              <Phone className="w-4 h-4" /> Call Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* New Ticket Dialog */}
       <Dialog open={showNewTicketDialog} onOpenChange={setShowNewTicketDialog}>
         <DialogContent className="sm:max-w-md">
@@ -593,6 +658,15 @@ export function Support() {
             <DialogTitle className="font-display font-semibold">Create New Ticket</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ticket-trip-id">Trip ID</Label>
+              <Input
+                id="ticket-trip-id"
+                placeholder="Trip UUID this ticket relates to"
+                value={newTicket.tripId}
+                onChange={(e) => setNewTicket({ ...newTicket, tripId: e.target.value })}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="ticket-subject">Subject</Label>
               <Input
@@ -645,9 +719,9 @@ export function Support() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNewTicketDialog(false)}>Cancel</Button>
-            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleNewTicketSubmit}>
-              Create Ticket
+            <Button variant="outline" onClick={() => setShowNewTicketDialog(false)} disabled={ticketSubmitting}>Cancel</Button>
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleNewTicketSubmit} disabled={ticketSubmitting}>
+              {ticketSubmitting ? 'Creating...' : 'Create Ticket'}
             </Button>
           </DialogFooter>
         </DialogContent>

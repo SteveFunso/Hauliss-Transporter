@@ -52,8 +52,8 @@ import {
 } from '@/components/ui/table';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getDrivers, getDriverDocuments, updateDriverStatus, type AdminDriver, type DriverDocument } from '@/lib/api/drivers';
-import { getUserStats } from '@/lib/api/users';
+import { getDrivers, getDriverDocuments, updateDriverStatus, updateDriver, type AdminDriver, type DriverDocument } from '@/lib/api/drivers';
+import { getUserStats, createUser } from '@/lib/api/users';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -147,22 +147,64 @@ export function Drivers() {
     }
   }, [refetch, selectedDriver]);
 
-  const handleAddDriver = () => {
+  const [addLoading, setAddLoading] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Advanced filter state
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
+
+  // Earnings dialog state
+  const [earningsOpen, setEarningsOpen] = useState(false);
+  const [earningsDriver, setEarningsDriver] = useState<AdminDriver | null>(null);
+
+  const handleAddDriver = async () => {
     if (!addForm.email || !addForm.full_name) {
       toast.error('Email and Full Name are required');
       return;
     }
-    toast.success(`Driver invitation sent to ${addForm.email}`);
-    setAddForm({ email: '', full_name: '', phone: '', company: '', transporter_id: '' });
-    setAddDriverOpen(false);
+    setAddLoading(true);
+    try {
+      await createUser({
+        email: addForm.email,
+        full_name: addForm.full_name,
+        phone_number: addForm.phone || undefined,
+        role: 'driver',
+        company_name: addForm.company || undefined,
+        transporter_id: addForm.transporter_id || undefined,
+        password: crypto.randomUUID().slice(0, 12),
+      });
+      toast.success(`Driver invitation sent to ${addForm.email}`);
+      setAddForm({ email: '', full_name: '', phone: '', company: '', transporter_id: '' });
+      setAddDriverOpen(false);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create driver');
+    } finally {
+      setAddLoading(false);
+    }
   };
 
-  const handleEditDriver = () => {
+  const handleEditDriver = async () => {
     if (!editingDriver) return;
-    toast.success(`Driver "${editForm.full_name}" updated successfully`);
-    setEditDriverOpen(false);
-    setEditingDriver(null);
-    refetch();
+    setEditLoading(true);
+    try {
+      await updateDriver(editingDriver.id, {
+        full_name: editForm.full_name,
+        phone_number: editForm.phone_number,
+        vehicle_type: editForm.vehicle_type,
+        transporter_id: editForm.transporter_id,
+      });
+      toast.success(`Driver "${editForm.full_name}" updated successfully`);
+      setEditDriverOpen(false);
+      setEditingDriver(null);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update driver');
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   const openEditDialog = (driver: AdminDriver) => {
@@ -309,9 +351,9 @@ export function Drivers() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDriverOpen(false)}>Cancel</Button>
-            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleAddDriver}>
-              Send Invitation
+            <Button variant="outline" onClick={() => setAddDriverOpen(false)} disabled={addLoading}>Cancel</Button>
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleAddDriver} disabled={addLoading}>
+              {addLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Send Invitation'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -359,9 +401,9 @@ export function Drivers() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDriverOpen(false)}>Cancel</Button>
-            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleEditDriver}>
-              Save Changes
+            <Button variant="outline" onClick={() => setEditDriverOpen(false)} disabled={editLoading}>Cancel</Button>
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleEditDriver} disabled={editLoading}>
+              {editLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -466,7 +508,7 @@ export function Drivers() {
                 <option value="pending">Pending</option>
                 <option value="suspended">Suspended</option>
               </select>
-              <Button variant="outline" size="icon" onClick={() => toast.info('Advanced filters coming soon')}>
+              <Button variant="outline" size="icon" onClick={() => setAdvancedFilterOpen(true)}>
                 <Filter className="w-4 h-4" />
               </Button>
             </div>
@@ -563,7 +605,7 @@ export function Drivers() {
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedDriver(driver); }}>
                                 <FileCheck className="w-4 h-4 mr-2" /> Verify Documents
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info('Earnings report coming soon'); }}>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEarningsDriver(driver); setEarningsOpen(true); }}>
                                 <Wallet className="w-4 h-4 mr-2" /> View Earnings
                               </DropdownMenuItem>
                               {driver.status !== 'suspended' ? (
@@ -790,6 +832,91 @@ export function Drivers() {
           )}
         </div>
       </div>
+
+      {/* Advanced Filters Dialog */}
+      <Dialog open={advancedFilterOpen} onOpenChange={setAdvancedFilterOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Advanced Filters</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="filter-vehicle">Vehicle Type</Label>
+              <Input
+                id="filter-vehicle"
+                placeholder="e.g., Flatbed, Box Truck"
+                value={vehicleTypeFilter}
+                onChange={(e) => setVehicleTypeFilter(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="filter-company">Company</Label>
+              <Input
+                id="filter-company"
+                placeholder="Filter by company name"
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setVehicleTypeFilter('');
+              setCompanyFilter('');
+            }}>
+              Clear Filters
+            </Button>
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={() => {
+              setSearchQuery([vehicleTypeFilter, companyFilter].filter(Boolean).join(' '));
+              pagination.setPage(1);
+              setAdvancedFilterOpen(false);
+            }}>
+              Apply Filters
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Earnings Summary Dialog */}
+      <Dialog open={earningsOpen} onOpenChange={setEarningsOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Driver Earnings Summary</DialogTitle>
+          </DialogHeader>
+          {earningsDriver && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-3">
+                <Avatar>
+                  <AvatarImage src={earningsDriver.profile_photo_url} alt={earningsDriver.full_name} />
+                  <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white">
+                    {getInitials(earningsDriver.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{earningsDriver.full_name}</p>
+                  <p className="text-sm text-muted-foreground">{earningsDriver.transporter_id || earningsDriver.email}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-[#F97316]">--</p>
+                  <p className="text-xs text-muted-foreground mt-1">Total Trips</p>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-[#111111]">--</p>
+                  <p className="text-xs text-muted-foreground mt-1">Total Earnings</p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                Detailed earnings data will be available once trips are recorded for this driver.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEarningsOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

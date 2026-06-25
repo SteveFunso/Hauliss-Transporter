@@ -51,11 +51,29 @@ export const getFleetAvailability = (params: FleetListParams = {}) => {
 export const getFleetStats = () =>
   api.get<FleetStats>("/api/admin/fleet/stats");
 
-export const getTruckTypes = () =>
-  api.get<TruckType[]>("/api/booking/truck-types");
+export const getTruckTypes = async (): Promise<TruckType[]> => {
+  const res = await api.get<{ data: { data: TruckType[] } }>("/api/booking/truck-types");
+  return res?.data?.data ?? [];
+};
 
 export const createTruck = (data: {
   plate_number: string;
   vehicle_type: string;
   driver_name?: string;
+  driver_id?: string;
 }) => api.post<{ id: string; plate_number: string; message: string }>("/api/admin/fleet/trucks", data);
+
+export const updateTruckType = (id: string, data: Partial<TruckType>) =>
+  api.patch<{ message: string }>(`/api/booking/truck-types/${id}`, data);
+
+export const deleteTruckType = (id: string) =>
+  api.delete<{ message: string }>(`/api/booking/truck-types/${id}`);
+
+export const createTruckType = (data: {
+  name: string;
+  capacity: string;
+  base_price: number;
+  min_price: number;
+  max_price: number;
+  is_available?: boolean;
+}) => api.post<{ id: string; message: string }>("/api/booking/truck-types", data);

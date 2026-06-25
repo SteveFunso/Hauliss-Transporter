@@ -10,7 +10,8 @@ import {
   Database,
   Eye,
   EyeOff,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,9 +20,17 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { useApi } from '@/hooks/useApi';
-import { getSettings, updateSettings } from '@/lib/api/settings';
+import { getSettings, updateSettings, type PlatformSettingsUpdate } from '@/lib/api/settings';
+import { createUser } from '@/lib/api/users';
 import { toast } from 'sonner';
 
 const generateApiKey = (prefix: string) => {
@@ -70,27 +79,45 @@ export function Settings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('admin');
-  const [liveApiKey, setLiveApiKey] = useState('pk_live_1234567890abcdef');
-  const [testApiKey, setTestApiKey] = useState('pk_test_0987654321fedcba');
+  const [liveApiKey, setLiveApiKey] = useState('');
+  const [testApiKey, setTestApiKey] = useState('');
+  const [regeneratingKey, setRegeneratingKey] = useState<'live' | 'test' | null>(null);
   const [flutterwaveEnabled, setFlutterwaveEnabled] = useState(false);
+  const [flutterwaveSaving, setFlutterwaveSaving] = useState(false);
   const [integrations, setIntegrations] = useState<Record<string, boolean>>({
     'Google Maps': true,
     'Paystack': true,
     'Twilio SMS': true,
     'SendGrid Email': true,
   });
+  const [integrationSaving, setIntegrationSaving] = useState<string | null>(null);
+  const [notifSaving, setNotifSaving] = useState<string | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState('');
+  const [rolePermissions, setRolePermissions] = useState<Record<string, boolean>>({
+    view_dashboard: true,
+    manage_drivers: false,
+    manage_bookings: false,
+    manage_fleet: false,
+    manage_payments: false,
+    manage_support: false,
+    manage_settings: false,
+    manage_users: false,
+  });
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
 
   const { data: savedSettings, isLoading } = useApi(() => getSettings(), []);
 
   useEffect(() => {
     if (savedSettings) {
       setSettings({
-        companyName: savedSettings.platform_name || '',
-        companyEmail: savedSettings.platform_email || '',
-        companyPhone: savedSettings.platform_phone || '',
+        companyName: savedSettings.platform_name?.value || '',
+        companyEmail: savedSettings.platform_email?.value || '',
+        companyPhone: savedSettings.platform_phone?.value || '',
         companyAddress: '',
-        timezone: savedSettings.timezone || 'Africa/Lagos',
-        currency: savedSettings.currency || 'NGN',
+        timezone: savedSettings.timezone?.value || 'Africa/Lagos',
+        currency: savedSettings.currency?.value || 'NGN',
         notifications: {
           email: savedSettings.notifications?.email ?? true,
           push: savedSettings.notifications?.push ?? true,
@@ -105,6 +132,15 @@ export function Settings() {
           passwordExpiry: savedSettings.security?.password_expiry ?? 90,
         }
       });
+      // Hydrate server-persisted toggles that previously reset to defaults on reload.
+      setFlutterwaveEnabled(savedSettings.flutterwave_enabled ?? false);
+      if (savedSettings.integrations) {
+        setIntegrations((prev) => ({ ...prev, ...savedSettings.integrations }));
+      }
+      // Load API keys from settings if available, otherwise generate initial ones
+      const s = savedSettings as any;
+      setLiveApiKey(s.live_api_key || generateApiKey('pk_live_'));
+      setTestApiKey(s.test_api_key || generateApiKey('pk_test_'));
     }
   }, [savedSettings]);
 
@@ -154,25 +190,109 @@ export function Settings() {
     setConfirmPassword('');
   };
 
-  const handleSendInvite = () => {
+  const handleSendInvite = async () => {
     if (!inviteEmail.trim() || !inviteEmail.includes('@')) {
       toast.error('Please enter a valid email address');
       return;
     }
-    toast.success(`Invitation sent to ${inviteEmail}`);
-    setInviteEmail('');
+    setInviteSending(true);
+    try {
+      await createUser({
+        email: inviteEmail,
+        full_name: inviteEmail.split('@')[0],
+        role: inviteRole,
+        password: crypto.randomUUID().slice(0, 12),
+      });
+      toast.success(`Invitation sent to ${inviteEmail}`);
+      setInviteEmail('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send invitation');
+    } finally {
+      setInviteSending(false);
+    }
   };
 
-  const handleRegenerateApiKey = (type: 'live' | 'test') => {
+  const handleRegenerateApiKey = async (type: 'live' | 'test') => {
     const newKey = generateApiKey(type === 'live' ? 'pk_live_' : 'pk_test_');
-    if (type === 'live') setLiveApiKey(newKey);
-    else setTestApiKey(newKey);
-    toast.success('API key regenerated');
+    setRegeneratingKey(type);
+    try {
+      const payload: any = {};
+      if (type === 'live') {
+        payload.live_api_key = newKey;
+      } else {
+        payload.test_api_key = newKey;
+      }
+      await updateSettings(payload as PlatformSettingsUpdate);
+      if (type === 'live') setLiveApiKey(newKey);
+      else setTestApiKey(newKey);
+      toast.success(`${type === 'live' ? 'Live' : 'Test'} API key regenerated`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to regenerate API key');
+    } finally {
+      setRegeneratingKey(null);
+    }
   };
 
-  const handleToggleIntegration = (name: string, checked: boolean) => {
-    setIntegrations(prev => ({ ...prev, [name]: checked }));
-    toast.success(`${name} ${checked ? 'enabled' : 'disabled'}`);
+  const handleToggleIntegration = async (name: string, checked: boolean) => {
+    setIntegrationSaving(name);
+    const updatedIntegrations = { ...integrations, [name]: checked };
+    try {
+      await updateSettings({ integrations: updatedIntegrations } as any);
+      setIntegrations(updatedIntegrations);
+      toast.success(`${name} ${checked ? 'enabled' : 'disabled'}`);
+    } catch (err: any) {
+      toast.error(err.message || `Failed to update ${name}`);
+    } finally {
+      setIntegrationSaving(null);
+    }
+  };
+
+  const persistNotificationChange = async (key: string, checked: boolean, newNotifications: typeof settings.notifications) => {
+    setNotifSaving(key);
+    try {
+      await updateSettings({
+        notifications: {
+          email: newNotifications.email,
+          push: newNotifications.push,
+          sms: newNotifications.sms,
+        },
+      });
+      toast.success(`${key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())} ${checked ? 'enabled' : 'disabled'}`);
+    } catch (err: any) {
+      // Revert on failure
+      setSettings(prev => ({ ...prev, notifications: { ...prev.notifications, [key]: !checked } }));
+      toast.error(err.message || 'Failed to update notification setting');
+    } finally {
+      setNotifSaving(null);
+    }
+  };
+
+  const handlePermissionsOpen = (role: string) => {
+    setEditingRole(role);
+    // Set default permissions per role
+    const defaults: Record<string, Record<string, boolean>> = {
+      'Admin': { view_dashboard: true, manage_drivers: true, manage_bookings: true, manage_fleet: true, manage_payments: true, manage_support: true, manage_settings: true, manage_users: true },
+      'Fleet Manager': { view_dashboard: true, manage_drivers: true, manage_bookings: true, manage_fleet: true, manage_payments: false, manage_support: false, manage_settings: false, manage_users: false },
+      'Support Agent': { view_dashboard: true, manage_drivers: false, manage_bookings: false, manage_fleet: false, manage_payments: false, manage_support: true, manage_settings: false, manage_users: false },
+    };
+    const fallback = defaults[role] || { view_dashboard: true, manage_drivers: false, manage_bookings: false, manage_fleet: false, manage_payments: false, manage_support: false, manage_settings: false, manage_users: false };
+    // Prefer server-persisted permissions for this role when available.
+    const saved = savedSettings?.role_permissions?.[role];
+    setRolePermissions(saved ? { ...fallback, ...saved } : fallback);
+    setPermissionsOpen(true);
+  };
+
+  const handleSavePermissions = async () => {
+    setPermissionsSaving(true);
+    try {
+      await updateSettings({ role_permissions: { [editingRole]: rolePermissions } } as any);
+      toast.success(`${editingRole} permissions updated`);
+      setPermissionsOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save permissions');
+    } finally {
+      setPermissionsSaving(false);
+    }
   };
 
   if (isLoading) {
@@ -313,9 +433,11 @@ export function Settings() {
                     </div>
                     <Switch
                       checked={settings.notifications.email}
+                      disabled={notifSaving === 'email'}
                       onCheckedChange={(checked) => {
-                        setSettings({ ...settings, notifications: {...settings.notifications, email: checked} });
-                        toast.success(`Email notifications ${checked ? 'enabled' : 'disabled'}`);
+                        const newNotifs = {...settings.notifications, email: checked};
+                        setSettings({ ...settings, notifications: newNotifs });
+                        persistNotificationChange('email', checked, newNotifs);
                       }}
                     />
                   </div>
@@ -326,9 +448,11 @@ export function Settings() {
                     </div>
                     <Switch
                       checked={settings.notifications.push}
+                      disabled={notifSaving === 'push'}
                       onCheckedChange={(checked) => {
-                        setSettings({ ...settings, notifications: {...settings.notifications, push: checked} });
-                        toast.success(`Push notifications ${checked ? 'enabled' : 'disabled'}`);
+                        const newNotifs = {...settings.notifications, push: checked};
+                        setSettings({ ...settings, notifications: newNotifs });
+                        persistNotificationChange('push', checked, newNotifs);
                       }}
                     />
                   </div>
@@ -339,9 +463,11 @@ export function Settings() {
                     </div>
                     <Switch
                       checked={settings.notifications.sms}
+                      disabled={notifSaving === 'sms'}
                       onCheckedChange={(checked) => {
-                        setSettings({ ...settings, notifications: {...settings.notifications, sms: checked} });
-                        toast.success(`SMS notifications ${checked ? 'enabled' : 'disabled'}`);
+                        const newNotifs = {...settings.notifications, sms: checked};
+                        setSettings({ ...settings, notifications: newNotifs });
+                        persistNotificationChange('sms', checked, newNotifs);
                       }}
                     />
                   </div>
@@ -356,9 +482,11 @@ export function Settings() {
                       </div>
                       <Switch
                         checked={settings.notifications.bookingUpdates}
+                        disabled={notifSaving === 'bookingUpdates'}
                         onCheckedChange={(checked) => {
-                          setSettings({ ...settings, notifications: {...settings.notifications, bookingUpdates: checked} });
-                          toast.success(`Booking updates ${checked ? 'enabled' : 'disabled'}`);
+                          const newNotifs = {...settings.notifications, bookingUpdates: checked};
+                          setSettings({ ...settings, notifications: newNotifs });
+                          persistNotificationChange('bookingUpdates', checked, newNotifs);
                         }}
                       />
                     </div>
@@ -369,9 +497,11 @@ export function Settings() {
                       </div>
                       <Switch
                         checked={settings.notifications.driverAlerts}
+                        disabled={notifSaving === 'driverAlerts'}
                         onCheckedChange={(checked) => {
-                          setSettings({ ...settings, notifications: {...settings.notifications, driverAlerts: checked} });
-                          toast.success(`Driver alerts ${checked ? 'enabled' : 'disabled'}`);
+                          const newNotifs = {...settings.notifications, driverAlerts: checked};
+                          setSettings({ ...settings, notifications: newNotifs });
+                          persistNotificationChange('driverAlerts', checked, newNotifs);
                         }}
                       />
                     </div>
@@ -382,9 +512,11 @@ export function Settings() {
                       </div>
                       <Switch
                         checked={settings.notifications.paymentNotifications}
+                        disabled={notifSaving === 'paymentNotifications'}
                         onCheckedChange={(checked) => {
-                          setSettings({ ...settings, notifications: {...settings.notifications, paymentNotifications: checked} });
-                          toast.success(`Payment notifications ${checked ? 'enabled' : 'disabled'}`);
+                          const newNotifs = {...settings.notifications, paymentNotifications: checked};
+                          setSettings({ ...settings, notifications: newNotifs });
+                          persistNotificationChange('paymentNotifications', checked, newNotifs);
                         }}
                       />
                     </div>
@@ -410,9 +542,21 @@ export function Settings() {
                     </div>
                     <Switch
                       checked={settings.security.twoFactor}
-                      onCheckedChange={(checked) => {
+                      onCheckedChange={async (checked) => {
                         setSettings({ ...settings, security: {...settings.security, twoFactor: checked} });
-                        toast.success(`Two-factor authentication ${checked ? 'enabled' : 'disabled'}`);
+                        try {
+                          await updateSettings({
+                            security: {
+                              two_factor: checked,
+                              session_timeout: settings.security.sessionTimeout,
+                              password_expiry: settings.security.passwordExpiry,
+                            },
+                          });
+                          toast.success(`Two-factor authentication ${checked ? 'enabled' : 'disabled'}`);
+                        } catch (err: any) {
+                          setSettings(prev => ({ ...prev, security: { ...prev.security, twoFactor: !checked } }));
+                          toast.error(err.message || 'Failed to update 2FA setting');
+                        }
                       }}
                     />
                   </div>
@@ -508,9 +652,18 @@ export function Settings() {
                         <span className="font-medium">Flutterwave</span>
                         <Switch
                           checked={flutterwaveEnabled}
-                          onCheckedChange={(checked) => {
-                            setFlutterwaveEnabled(checked);
-                            toast.success(`Flutterwave ${checked ? 'enabled' : 'disabled'}`);
+                          disabled={flutterwaveSaving}
+                          onCheckedChange={async (checked) => {
+                            setFlutterwaveSaving(true);
+                            try {
+                              await updateSettings({ flutterwave_enabled: checked } as any);
+                              setFlutterwaveEnabled(checked);
+                              toast.success(`Flutterwave ${checked ? 'enabled' : 'disabled'}`);
+                            } catch (err: any) {
+                              toast.error(err.message || 'Failed to update Flutterwave setting');
+                            } finally {
+                              setFlutterwaveSaving(false);
+                            }
                           }}
                         />
                       </div>
@@ -562,7 +715,7 @@ export function Settings() {
                             {role === 'Support Agent' && 'Handle support tickets'}
                           </p>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => toast.info(`Editing ${role} permissions...`)}>Edit Permissions</Button>
+                        <Button variant="outline" size="sm" onClick={() => handlePermissionsOpen(role)}>Edit Permissions</Button>
                       </div>
                     ))}
                   </div>
@@ -585,7 +738,9 @@ export function Settings() {
                       <option value="fleet_manager">Fleet Manager</option>
                       <option value="support">Support</option>
                     </select>
-                    <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleSendInvite}>Send Invite</Button>
+                    <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleSendInvite} disabled={inviteSending}>
+                      {inviteSending ? 'Sending...' : 'Send Invite'}
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -602,18 +757,18 @@ export function Settings() {
                   <h4 className="font-medium">API Keys</h4>
                   <div className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-mono text-sm">{liveApiKey}</span>
-                      <Button variant="outline" size="sm" className="gap-1" onClick={() => handleRegenerateApiKey('live')}>
-                        <RefreshCw className="w-3 h-3" /> Regenerate
+                      <span className="font-mono text-sm">{liveApiKey || 'Loading...'}</span>
+                      <Button variant="outline" size="sm" className="gap-1" onClick={() => handleRegenerateApiKey('live')} disabled={regeneratingKey === 'live'}>
+                        {regeneratingKey === 'live' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Regenerate
                       </Button>
                     </div>
                     <p className="text-sm text-muted-foreground">Live API key for production use</p>
                   </div>
                   <div className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-mono text-sm">{testApiKey}</span>
-                      <Button variant="outline" size="sm" className="gap-1" onClick={() => handleRegenerateApiKey('test')}>
-                        <RefreshCw className="w-3 h-3" /> Regenerate
+                      <span className="font-mono text-sm">{testApiKey || 'Loading...'}</span>
+                      <Button variant="outline" size="sm" className="gap-1" onClick={() => handleRegenerateApiKey('test')} disabled={regeneratingKey === 'test'}>
+                        {regeneratingKey === 'test' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Regenerate
                       </Button>
                     </div>
                     <p className="text-sm text-muted-foreground">Test API key for development</p>
@@ -630,6 +785,7 @@ export function Settings() {
                         </div>
                         <Switch
                           checked={enabled}
+                          disabled={integrationSaving === name}
                           onCheckedChange={(checked) => handleToggleIntegration(name, checked)}
                         />
                       </div>
@@ -653,6 +809,36 @@ export function Settings() {
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
+
+      {/* Permissions Editor Dialog */}
+      <Dialog open={permissionsOpen} onOpenChange={setPermissionsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display font-semibold">
+              Edit {editingRole} Permissions
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {Object.entries(rolePermissions).map(([key, value]) => (
+              <div key={key} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                <span className="text-sm font-medium capitalize">
+                  {key.replace(/_/g, ' ')}
+                </span>
+                <Switch
+                  checked={value}
+                  onCheckedChange={(checked) => setRolePermissions(prev => ({ ...prev, [key]: checked }))}
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPermissionsOpen(false)} disabled={permissionsSaving}>Cancel</Button>
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleSavePermissions} disabled={permissionsSaving}>
+              {permissionsSaving ? 'Saving...' : 'Save Permissions'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

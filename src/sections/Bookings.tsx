@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search,
   MoreVertical,
@@ -47,9 +47,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MapView } from '@/components/ui/map-view';
+import { useAddressAutocomplete } from '@/hooks/useAddressAutocomplete';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getBookings, getBookingStats, updateBookingStatus, type AdminBooking } from '@/lib/api/bookings';
+import { getBookings, getBookingStats, updateBookingStatus, createBooking, type AdminBooking } from '@/lib/api/bookings';
 import type { ApiResponse } from '@/lib/api/client';
 import { toast } from 'sonner';
 
@@ -86,6 +88,17 @@ export function Bookings() {
   const [newBookingForm, setNewBookingForm] = useState<NewBookingForm>(emptyForm);
   const [creating, setCreating] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  const pickupInputRef = useRef<HTMLInputElement>(null);
+  const dropoffInputRef = useRef<HTMLInputElement>(null);
+
+  useAddressAutocomplete(pickupInputRef, (place) => {
+    setNewBookingForm((prev) => ({ ...prev, pickupAddress: place.address }));
+  });
+
+  useAddressAutocomplete(dropoffInputRef, (place) => {
+    setNewBookingForm((prev) => ({ ...prev, dropoffAddress: place.address }));
+  });
 
   const pagination = usePagination(15);
 
@@ -136,8 +149,15 @@ export function Bookings() {
     }
     setCreating(true);
     try {
-      // Simulate creation - in production this would call a createBooking API
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await createBooking({
+        pickup_address: newBookingForm.pickupAddress,
+        dropoff_address: newBookingForm.dropoffAddress,
+        cargo_type: newBookingForm.cargoType,
+        cargo_weight: newBookingForm.cargoWeight,
+        truck_type: newBookingForm.truckType,
+        contact_name: newBookingForm.contactName,
+        contact_phone: newBookingForm.contactPhone,
+      });
       toast.success("Booking created successfully");
       setNewBookingOpen(false);
       setNewBookingForm(emptyForm);
@@ -201,6 +221,7 @@ export function Bookings() {
             <div className="grid gap-2">
               <Label htmlFor="pickupAddress">Pickup Address</Label>
               <Input
+                ref={pickupInputRef}
                 id="pickupAddress"
                 placeholder="Enter pickup address"
                 value={newBookingForm.pickupAddress}
@@ -210,6 +231,7 @@ export function Bookings() {
             <div className="grid gap-2">
               <Label htmlFor="dropoffAddress">Dropoff Address</Label>
               <Input
+                ref={dropoffInputRef}
                 id="dropoffAddress"
                 placeholder="Enter dropoff address"
                 value={newBookingForm.dropoffAddress}
@@ -547,7 +569,7 @@ export function Bookings() {
                                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedBooking(booking); }}>
                                   <Eye className="w-4 h-4 mr-2" /> View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info("Edit booking coming soon"); }}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info("Edit booking — view details"); }}>
                                   <Edit className="w-4 h-4 mr-2" /> Edit Booking
                                 </DropdownMenuItem>
                                 {booking.status.toLowerCase() === 'pending' && (
@@ -680,6 +702,31 @@ export function Bookings() {
                     </div>
                   </div>
                 </div>
+
+                {/* Route Map */}
+                {(() => {
+                  // Server sends lat/lng as strings (incl. placeholder "0"); coerce
+                  // and only render when all four are finite, real coordinates.
+                  const pLat = Number(selectedBooking.pickup?.lat);
+                  const pLng = Number(selectedBooking.pickup?.lng);
+                  const dLat = Number(selectedBooking.dropoff?.lat);
+                  const dLng = Number(selectedBooking.dropoff?.lng);
+                  const valid = [pLat, pLng, dLat, dLng].every((v) => Number.isFinite(v) && v !== 0);
+                  if (!valid) return null;
+                  return (
+                    <MapView
+                      height="200px"
+                      markers={[
+                        { lat: pLat, lng: pLng, label: 'Pickup', color: 'green' },
+                        { lat: dLat, lng: dLng, label: 'Dropoff', color: 'red' },
+                      ]}
+                      route={{
+                        origin: { lat: pLat, lng: pLng },
+                        destination: { lat: dLat, lng: dLng },
+                      }}
+                    />
+                  );
+                })()}
 
                 {/* Cargo Details */}
                 <div className="space-y-3">

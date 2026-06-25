@@ -1,8 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap');
+/* Google Places Autocomplete dropdown z-index fix */
+.pac-container {
+  z-index: 99999 !important;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  border: 1px solid #e5e7eb;
+  font-family: 'Inter', sans-serif;
+  margin-top: 4px;
+}
+.pac-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.pac-item:hover {
+  background-color: #f9fafb;
+}
+.pac-item-query {
+  font-weight: 500;
+  color: #111827;
+}
+.pac-matched {
+  color: #F97316;
+  font-weight: 600;
+}
 
 @layer base {
   :root {

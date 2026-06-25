@@ -60,4 +60,6 @@ export const createUser = (data: {
   phone_number?: string;
   role?: string;
   company_name?: string;
+  transporter_id?: string;
+  vehicle_type?: string;
 }) => api.post<{ id: string; message: string }>("/api/admin/users", data);

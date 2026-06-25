@@ -50,5 +50,8 @@ export const getDriver = (id: string) =>
 export const updateDriverStatus = (id: string, status: string) =>
   api.patch<{ message: string }>(`/api/admin/users/${id}`, { status });
 
+export const updateDriver = (id: string, data: Partial<AdminDriver>) =>
+  api.patch<{ message: string }>(`/api/admin/users/${id}`, data);
+
 export const getDriverDocuments = (driverId: string) =>
   api.get<{ documents: DriverDocument[] }>(`/api/driver/documents?driver_id=${driverId}`);

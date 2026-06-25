@@ -59,6 +59,15 @@ import { usePagination } from '@/hooks/usePagination';
 import { getUsers, getUserStats, updateUser, createUser, type AdminUser } from '@/lib/api/users';
 import { toast } from 'sonner';
 
+// Real, assignable platform roles (filter, labels and dialogs all derive from this).
+const ROLES: { value: string; label: string }[] = [
+  { value: 'client', label: 'Client' },
+  { value: 'driver', label: 'Driver' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'super_admin', label: 'Super Admin' },
+];
+
 function TableRowSkeleton() {
   return (
     <TableRow>
@@ -226,16 +235,7 @@ export function Users() {
   };
 
   const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'Admin';
-      case 'fleet_manager':
-        return 'Fleet Manager';
-      case 'support':
-        return 'Support';
-      default:
-        return role;
-    }
+    return ROLES.find((r) => r.value === role)?.label ?? role;
   };
 
   return (
@@ -287,9 +287,9 @@ export function Users() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="all">All Roles</option>
-                <option value="admin">Admin</option>
-                <option value="fleet_manager">Fleet Manager</option>
-                <option value="support">Support</option>
+                {ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
               </select>
               <Button
                 variant="outline"
@@ -400,7 +400,7 @@ export function Users() {
                               <DropdownMenuItem onClick={() => handleOpenEdit(user)}>
                                 <Pencil className="w-4 h-4 mr-2" /> Edit User
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast.info("Activity log coming soon")}>
+                              <DropdownMenuItem onClick={() => toast.info("Activity log — view details")}>
                                 <Activity className="w-4 h-4 mr-2" /> View Activity
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
@@ -583,9 +583,9 @@ export function Users() {
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="fleet_manager">Fleet Manager</SelectItem>
-                  <SelectItem value="support">Support</SelectItem>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -730,9 +730,9 @@ export function Users() {
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="fleet_manager">Fleet Manager</SelectItem>
-                  <SelectItem value="support">Support</SelectItem>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

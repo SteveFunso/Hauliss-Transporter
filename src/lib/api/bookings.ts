@@ -16,15 +16,15 @@ export type AdminBooking = {
   };
   pickup: {
     address: string;
-    lat: number;
-    lng: number;
+    lat: string;
+    lng: string;
     contact_name: string;
     contact_phone: string;
   } | null;
   dropoff: {
     address: string;
-    lat: number;
-    lng: number;
+    lat: string;
+    lng: string;
     contact_name: string;
     contact_phone: string;
   } | null;
@@ -64,3 +64,18 @@ export const updateBookingStatus = (id: string, status: string) =>
 
 export const getBookingStats = () =>
   api.get<BookingStats>("/api/admin/bookings/stats");
+
+export const createBooking = (data: {
+  pickup_address: string;
+  dropoff_address: string;
+  cargo_type: string;
+  cargo_weight: string;
+  truck_type: string;
+  contact_name: string;
+  contact_phone: string;
+}) => api.post<any>("/api/admin/bookings", {
+  pickup: { address: data.pickup_address, contact_name: data.contact_name, contact_phone: data.contact_phone },
+  dropoff: { address: data.dropoff_address },
+  cargo: { category: data.cargo_type, weight: data.cargo_weight },
+  truck_type_id: data.truck_type,
+});
