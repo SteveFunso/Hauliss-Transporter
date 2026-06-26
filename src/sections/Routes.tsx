@@ -132,6 +132,7 @@ function ServiceRoutesTab() {
   const { page, limit, total, totalPages, setTotal, nextPage, prevPage } = usePagination(10);
   const { data, isLoading, refetch } = useApi(() => getRoutes({ page, limit }), [page, limit]);
   const [routes, setRoutes] = useState<CompanyRoute[]>([]);
+  const [statCounts, setStatCounts] = useState({ active: 0, inactive: 0 });
   const [showForm, setShowForm] = useState(false);
   const [editingRoute, setEditingRoute] = useState<CompanyRoute | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -179,8 +180,38 @@ function ServiceRoutesTab() {
     }
   }, [data, setTotal]);
 
-  const activeCount = routes.filter((r) => r.is_active).length;
-  const inactiveCount = routes.length - activeCount;
+  // Aggregate active/inactive counts across all pages — the paged `routes`
+  // array undercounts once routes exceed the page size. Gateway caps limit at
+  // 100, so paginate. Recomputed whenever the list changes (create/edit/delete).
+  const fetchAllStats = async () => {
+    try {
+      let active = 0, inactive = 0;
+      let p = 1;
+      const pageLimit = 100;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const res = await getRoutes({ page: p, limit: pageLimit });
+        const rows = (res as any).data ?? [];
+        for (const r of rows) {
+          if (r.is_active) active++;
+          else inactive++;
+        }
+        const totalRows = (res as any).pagination?.total ?? rows.length;
+        if (p * pageLimit >= totalRows || rows.length === 0) break;
+        p++;
+      }
+      setStatCounts({ active, inactive });
+    } catch {
+      // leave previous counts in place on failure
+    }
+  };
+
+  useEffect(() => {
+    fetchAllStats();
+  }, []);
+
+  const activeCount = statCounts.active;
+  const inactiveCount = statCounts.inactive;
 
   const openEdit = (route: CompanyRoute) => {
     setEditingRoute(route);
@@ -228,6 +259,7 @@ function ServiceRoutesTab() {
       }
       closeForm();
       refetch();
+      fetchAllStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to save route');
     } finally {
@@ -240,6 +272,7 @@ function ServiceRoutesTab() {
       await updateRoute(route.id, { is_active: !route.is_active });
       toast.success(`Route ${route.is_active ? 'deactivated' : 'activated'}`);
       refetch();
+      fetchAllStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
     }
@@ -252,6 +285,7 @@ function ServiceRoutesTab() {
       toast.success('Route deleted');
       setDeleteConfirmId(null);
       refetch();
+      fetchAllStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete route');
     }
@@ -765,7 +799,7 @@ function CoverageAreasTab() {
 // ─── Route Pricing Tab ──────────────────────────────────────────────────────
 
 function RoutePricingTab() {
-  const { data: routesData, isLoading: routesLoading } = useApi(() => getRoutes({ limit: 100 }), []);
+  const { data: routesData, isLoading: routesLoading, error: routesError, refetch: refetchRoutes } = useApi(() => getRoutes({ limit: 100 }), []);
   const [routes, setRoutes] = useState<CompanyRoute[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [pricingList, setPricingList] = useState<RoutePricing[]>([]);
@@ -900,6 +934,13 @@ function RoutePricingTab() {
             <Label>Select Route</Label>
             {routesLoading ? (
               <Skeleton className="h-10 w-full" />
+            ) : routesError ? (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+                <p className="text-sm text-red-600">{routesError}</p>
+                <Button variant="outline" size="sm" onClick={refetchRoutes}>
+                  Retry
+                </Button>
+              </div>
             ) : (
               <Select value={selectedRouteId} onValueChange={setSelectedRouteId}>
                 <SelectTrigger>

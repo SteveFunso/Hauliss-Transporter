@@ -753,10 +753,12 @@ export function Bookings() {
                       <span className="text-sm text-muted-foreground">Weight</span>
                       <span className="text-sm font-medium">{selectedBooking.cargo?.weight ?? 'N/A'}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Size</span>
-                      <span className="text-sm font-medium">{selectedBooking.cargo?.size ?? 'N/A'}</span>
-                    </div>
+                    {selectedBooking.cargo?.size && (
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">Size</span>
+                        <span className="text-sm font-medium">{selectedBooking.cargo.size}</span>
+                      </div>
+                    )}
                   </div>
                   {selectedBooking.cargo?.description && (
                     <p className="text-sm text-muted-foreground">

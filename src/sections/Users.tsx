@@ -14,7 +14,6 @@ import {
   ChevronRight,
   Eye,
   Pencil,
-  Activity,
   Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -409,9 +408,6 @@ export function Users() {
                               <DropdownMenuItem onClick={() => handleOpenEdit(user)}>
                                 <Pencil className="w-4 h-4 mr-2" /> Edit User
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast.info("Activity log — view details")}>
-                                <Activity className="w-4 h-4 mr-2" /> View Activity
-                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {user.status === 'active' ? (
                                 <DropdownMenuItem
@@ -550,7 +546,7 @@ export function Users() {
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>
-              Send an invitation to a new platform user.
+              Create a new platform user.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -619,7 +615,7 @@ export function Users() {
               disabled={addUserLoading}
             >
               {addUserLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Send Invitation
+              Create User
             </Button>
           </DialogFooter>
         </DialogContent>

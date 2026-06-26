@@ -5,7 +5,7 @@ export type AdminPayment = {
   booking_id: string;
   quote_id: string;
   provider: string;
-  amount_minor_units: number;
+  amount_minor_units: number | string;
   currency: string;
   status: string;
   tx_ref: string;
@@ -36,10 +36,13 @@ export const getPayments = async (params: PaymentListParams = {}) => {
   const res = await api.get<ApiResponse<AdminPayment[]>>(`/api/admin/payments?${qs}`);
   return {
     ...res,
-    data: (res.data ?? []).map((r) => ({
-      ...r,
-      amount_minor_units: Number(r.amount_minor_units),
-    })),
+    data: (res.data ?? []).map((r) => {
+      const amount = Number(r.amount_minor_units);
+      return {
+        ...r,
+        amount_minor_units: Number.isFinite(amount) ? amount : 0,
+      };
+    }),
   };
 };
 

@@ -102,7 +102,7 @@ export function Wallet() {
   const exportCSV = () => {
     const headers = "ID,Booking,Provider,Amount,Status,Date\n";
     const rows = payments.map(p =>
-      `${p.id},${p.booking_id},${p.provider},${p.amount_minor_units / 100},${p.status},${p.created_at}`
+      `${p.id},${p.booking_id || ''},${p.provider},${toMajor(p.amount_minor_units)},${p.status},${p.created_at}`
     ).join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -120,7 +120,7 @@ export function Wallet() {
       `Payment ID: ${payment.id}`,
       `Booking ID: ${payment.booking_id || 'N/A'}`,
       `Provider: ${payment.provider?.replace('_', ' ') ?? 'Unknown'}`,
-      `Amount: ${formatCurrency(payment.amount_minor_units / 100)}`,
+      `Amount: ${formatCurrency(toMajor(payment.amount_minor_units))}`,
       `Currency: ${payment.currency}`,
       `Status: ${payment.status}`,
       `Date: ${new Date(payment.created_at).toLocaleString()}`,
@@ -187,11 +187,18 @@ export function Wallet() {
   };
 
   const formatCurrency = (amount: number) => {
+    const value = Number.isFinite(amount) ? amount : 0;
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',
       currency: 'NGN',
       minimumFractionDigits: 0
-    }).format(amount);
+    }).format(value);
+  };
+
+  // amount_minor_units may arrive as a string; coerce defensively so math/formatting never sees NaN
+  const toMajor = (minor: number | string) => {
+    const n = Number(minor);
+    return (Number.isFinite(n) ? n : 0) / 100;
   };
 
   const totalRevenueRaw = Number(stats?.total_amount ?? 0) / 100;
@@ -261,7 +268,7 @@ export function Wallet() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Amount</span>
-                  <span className="text-sm font-semibold">{formatCurrency(selectedPayment.amount_minor_units / 100)}</span>
+                  <span className="text-sm font-semibold">{formatCurrency(toMajor(selectedPayment.amount_minor_units))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Currency</span>
@@ -305,7 +312,7 @@ export function Wallet() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Amount</span>
-                  <span className="text-sm font-semibold text-red-600">{formatCurrency(refundTarget.amount_minor_units / 100)}</span>
+                  <span className="text-sm font-semibold text-red-600">{formatCurrency(toMajor(refundTarget.amount_minor_units))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Provider</span>
@@ -500,7 +507,7 @@ export function Wallet() {
                             ? 'text-red-600'
                             : 'text-foreground'
                         )}>
-                          {formatCurrency(payment.amount_minor_units / 100)}
+                          {formatCurrency(toMajor(payment.amount_minor_units))}
                         </span>
                       </TableCell>
                       <TableCell>{getStatusBadge(payment.status)}</TableCell>

@@ -214,10 +214,10 @@ export function Settings() {
         role: inviteRole,
         password: crypto.randomUUID().slice(0, 12),
       });
-      toast.success(`Invitation sent to ${inviteEmail}`);
+      toast.success(`User account created for ${inviteEmail}`);
       setInviteEmail('');
     } catch (err: any) {
-      toast.error(err.message || 'Failed to send invitation');
+      toast.error(err.message || 'Failed to create user account');
     } finally {
       setInviteSending(false);
     }
@@ -740,7 +740,7 @@ export function Settings() {
                   </div>
                 </div>
                 <div className="border-t pt-6">
-                  <h4 className="font-medium mb-4">Invite New Admin</h4>
+                  <h4 className="font-medium mb-4">Create New Admin</h4>
                   <div className="flex gap-2">
                     <Input
                       placeholder="Enter email address"
@@ -758,7 +758,7 @@ export function Settings() {
                       <option value="support">Support</option>
                     </select>
                     <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleSendInvite} disabled={inviteSending}>
-                      {inviteSending ? 'Sending...' : 'Send Invite'}
+                      {inviteSending ? 'Creating...' : 'Create User'}
                     </Button>
                   </div>
                 </div>
