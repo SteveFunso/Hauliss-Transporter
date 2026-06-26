@@ -64,6 +64,9 @@ const ROLES: { value: string; label: string }[] = [
   { value: 'client', label: 'Client' },
   { value: 'driver', label: 'Driver' },
   { value: 'agent', label: 'Agent' },
+  { value: 'company_owner', label: 'Company Owner' },
+  { value: 'fleet_manager', label: 'Fleet Manager' },
+  { value: 'support', label: 'Support' },
   { value: 'admin', label: 'Admin' },
   { value: 'super_admin', label: 'Super Admin' },
 ];

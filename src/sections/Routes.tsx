@@ -118,8 +118,8 @@ const zoneColorMap: Record<string, string> = {
   premium: 'bg-amber-100 text-amber-700',
 };
 
-function formatMinor(amountMinor: number): string {
-  return `\u20A6${(amountMinor / 100).toLocaleString()}`;
+function formatMinor(amountMinor: number | string): string {
+  return `\u20A6${(Number(amountMinor) / 100).toLocaleString()}`;
 }
 
 function toMinor(display: string): number {
@@ -770,6 +770,7 @@ function RoutePricingTab() {
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [pricingList, setPricingList] = useState<RoutePricing[]>([]);
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingPricing, setEditingPricing] = useState<RoutePricing | null>(null);
   const [formData, setFormData] = useState(defaultPricingForm);
@@ -782,49 +783,44 @@ function RoutePricingTab() {
     }
   }, [routesData]);
 
-  useEffect(() => {
-    if (!selectedRouteId) {
-      setPricingList([]);
-      return;
-    }
-    const fetchPricing = async () => {
-      setPricingLoading(true);
-      try {
-        const res = await getRoutePricing(selectedRouteId);
-        const list = Array.isArray(res) ? res : (res as any).data ?? [];
-        setPricingList(list);
-      } catch {
-        setPricingList([]);
-      } finally {
-        setPricingLoading(false);
-      }
-    };
-    fetchPricing();
-  }, [selectedRouteId]);
-
-  const refetchPricing = async () => {
+  const loadPricing = async () => {
     if (!selectedRouteId) return;
     setPricingLoading(true);
+    setPricingError(null);
     try {
       const res = await getRoutePricing(selectedRouteId);
       const list = Array.isArray(res) ? res : (res as any).data ?? [];
       setPricingList(list);
-    } catch {
+    } catch (err: any) {
+      // Distinguish a real fetch failure from a legitimately-empty response:
+      // surface the error instead of collapsing into the empty state.
+      setPricingError(err?.message || 'Failed to load pricing');
       setPricingList([]);
     } finally {
       setPricingLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (!selectedRouteId) {
+      setPricingList([]);
+      setPricingError(null);
+      return;
+    }
+    loadPricing();
+  }, [selectedRouteId]);
+
+  const refetchPricing = () => loadPricing();
+
   const openEdit = (pricing: RoutePricing) => {
     setEditingPricing(pricing);
     setFormData({
       truck_type: pricing.truck_type,
       pricing_type: pricing.pricing_type,
-      base_fare: String(pricing.base_fare_minor / 100),
-      per_km_rate: String(pricing.per_km_rate_minor / 100),
-      per_stop_rate: String(pricing.per_stop_rate_minor / 100),
-      flat_rate: String(pricing.flat_rate_minor / 100),
+      base_fare: String(Number(pricing.base_fare_minor) / 100),
+      per_km_rate: String(Number(pricing.per_km_rate_minor) / 100),
+      per_stop_rate: String(Number(pricing.per_stop_rate_minor) / 100),
+      flat_rate: String(Number(pricing.flat_rate_minor) / 100),
     });
   };
 
@@ -944,6 +940,15 @@ function RoutePricingTab() {
                     <Skeleton className="h-4 w-16" />
                   </div>
                 ))}
+              </div>
+            ) : pricingError ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <DollarSign className="w-12 h-12 text-red-400/60 mb-3" />
+                <p className="text-red-600 font-medium">Could not load pricing</p>
+                <p className="text-sm text-muted-foreground mt-1">{pricingError}</p>
+                <Button variant="outline" size="sm" className="mt-4" onClick={loadPricing}>
+                  Retry
+                </Button>
               </div>
             ) : pricingList.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">

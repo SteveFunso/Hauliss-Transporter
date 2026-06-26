@@ -4,7 +4,6 @@ import {
   MoreVertical,
   MessageSquare,
   Phone,
-  Mail,
   Clock,
   CheckCircle,
   XCircle,
@@ -58,7 +57,7 @@ export function Support() {
   const [selectedTicket, setSelectedTicket] = useState<AdminDispute | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
   const [showNewTicketDialog, setShowNewTicketDialog] = useState(false);
-  const [newTicket, setNewTicket] = useState({ subject: '', description: '', issueType: 'general', priority: 'medium', tripId: '' });
+  const [newTicket, setNewTicket] = useState({ subject: '', description: '', issueType: 'late_delivery', priority: 'medium', tripId: '' });
   const [ticketSubmitting, setTicketSubmitting] = useState(false);
   const [callCenterOpen, setCallCenterOpen] = useState(false);
   const replyRef = useRef<HTMLTextAreaElement>(null);
@@ -110,14 +109,16 @@ export function Support() {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'payment':
+      case 'payment_issue':
+      case 'overcharge':
         return <AlertCircle className="w-4 h-4" />;
-      case 'trip':
-        return <MessageSquare className="w-4 h-4" />;
-      case 'driver':
+      case 'late_delivery':
+      case 'wrong_route':
+        return <Clock className="w-4 h-4" />;
+      case 'driver_behavior':
         return <User className="w-4 h-4" />;
-      case 'technical':
-        return <Mail className="w-4 h-4" />;
+      case 'damaged_cargo':
+        return <Archive className="w-4 h-4" />;
       default:
         return <MessageSquare className="w-4 h-4" />;
     }
@@ -190,7 +191,7 @@ export function Support() {
       });
       toast.success('Support ticket created');
       setShowNewTicketDialog(false);
-      setNewTicket({ subject: '', description: '', issueType: 'general', priority: 'medium', tripId: '' });
+      setNewTicket({ subject: '', description: '', issueType: 'late_delivery', priority: 'medium', tripId: '' });
       refetch();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create ticket');
@@ -491,9 +492,10 @@ export function Support() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center',
-                      selectedTicket.issue_type === 'payment' ? 'bg-red-100 text-red-600' :
-                      selectedTicket.issue_type === 'trip' ? 'bg-blue-100 text-blue-600' :
-                      selectedTicket.issue_type === 'driver' ? 'bg-purple-100 text-purple-600' :
+                      (selectedTicket.issue_type === 'payment_issue' || selectedTicket.issue_type === 'overcharge') ? 'bg-red-100 text-red-600' :
+                      (selectedTicket.issue_type === 'late_delivery' || selectedTicket.issue_type === 'wrong_route') ? 'bg-blue-100 text-blue-600' :
+                      selectedTicket.issue_type === 'driver_behavior' ? 'bg-purple-100 text-purple-600' :
+                      selectedTicket.issue_type === 'damaged_cargo' ? 'bg-amber-100 text-amber-600' :
                       'bg-gray-100 text-gray-600'
                     )}>
                       {getTypeIcon(selectedTicket.issue_type)}
@@ -688,11 +690,13 @@ export function Support() {
                   onChange={(e) => setNewTicket({ ...newTicket, issueType: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
                 >
-                  <option value="general">General</option>
-                  <option value="payment">Payment</option>
-                  <option value="trip">Trip</option>
-                  <option value="driver">Driver</option>
-                  <option value="technical">Technical</option>
+                  <option value="late_delivery">Late Delivery</option>
+                  <option value="damaged_cargo">Damaged Cargo</option>
+                  <option value="overcharge">Overcharge</option>
+                  <option value="wrong_route">Wrong Route</option>
+                  <option value="driver_behavior">Driver Behavior</option>
+                  <option value="payment_issue">Payment Issue</option>
+                  <option value="other">Other</option>
                 </select>
               </div>
               <div className="space-y-2">

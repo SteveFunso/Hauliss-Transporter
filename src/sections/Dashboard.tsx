@@ -100,14 +100,14 @@ export function Dashboard() {
   };
 
   const handleExport = () => {
-    if (!stats) {
+    const rows: ChartDataPoint[] = Object.entries(stats ?? {}).map(([key, value]) => ({
+      name: key,
+      value: typeof value === 'number' ? value : 0
+    }));
+    if (rows.length === 0) {
       toast.error('No data to export');
       return;
     }
-    const rows: ChartDataPoint[] = Object.entries(stats).map(([key, value]) => ({
-      name: key,
-      value: value as number
-    }));
     const headers = Object.keys(rows[0]).join(',');
     const body = rows.map(row => Object.values(row).join(',')).join('\n');
     const csv = `${headers}\n${body}`;

@@ -564,8 +564,8 @@ export function Bookings() {
                           </TableCell>
                           <TableCell>
                             <div>
-                              <p className="text-sm font-medium">{booking.cargo.category}</p>
-                              <p className="text-xs text-muted-foreground">{booking.cargo.weight ?? 'N/A'}</p>
+                              <p className="text-sm font-medium">{booking.cargo?.category ?? 'N/A'}</p>
+                              <p className="text-xs text-muted-foreground">{booking.cargo?.weight ?? 'N/A'}</p>
                             </div>
                           </TableCell>
                           <TableCell>{getStatusBadge(booking.status)}</TableCell>
@@ -747,18 +747,18 @@ export function Bookings() {
                   <div className="p-4 rounded-lg bg-muted/50 space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Category</span>
-                      <span className="text-sm font-medium">{selectedBooking.cargo.category}</span>
+                      <span className="text-sm font-medium">{selectedBooking.cargo?.category ?? 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Weight</span>
-                      <span className="text-sm font-medium">{selectedBooking.cargo.weight ?? 'N/A'}</span>
+                      <span className="text-sm font-medium">{selectedBooking.cargo?.weight ?? 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Size</span>
-                      <span className="text-sm font-medium">{selectedBooking.cargo.size}</span>
+                      <span className="text-sm font-medium">{selectedBooking.cargo?.size ?? 'N/A'}</span>
                     </div>
                   </div>
-                  {selectedBooking.cargo.description && (
+                  {selectedBooking.cargo?.description && (
                     <p className="text-sm text-muted-foreground">
                       {selectedBooking.cargo.description}
                     </p>

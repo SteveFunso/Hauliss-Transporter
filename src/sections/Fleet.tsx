@@ -125,26 +125,46 @@ export function Fleet() {
       : <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100">Offline</Badge>;
   };
 
+  // Normalize the many ways a vehicle type can arrive from the API (snake_case,
+  // kebab-case, spaced, mixed case, known synonyms) to a single canonical key.
+  const normalizeVehicleType = (type: string) =>
+    type.trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+  // Canonical key -> clean display label. Synonyms fold onto the same label.
+  const VEHICLE_TYPE_LABELS: Record<string, string> = {
+    flatbed: 'Flatbed',
+    flat_bed: 'Flatbed',
+    box_truck: 'Box Truck',
+    box: 'Box Truck',
+    tanker: 'Tanker',
+    tanker_truck: 'Tanker',
+    tipper: 'Tipper',
+    dump_truck: 'Tipper',
+    refrigerated: 'Refrigerated',
+    reefer: 'Refrigerated',
+    container: 'Container',
+    container_truck: 'Container',
+    pickup: 'Pickup',
+    pickup_truck: 'Pickup',
+    van: 'Van',
+    trailer: 'Trailer',
+    lowboy: 'Lowboy',
+  };
+
   const getTruckTypeLabel = (type: string) => {
     if (!type) return '—';
-    // Try to match from API truck types
-    const found = truckTypes.find((t) => t.name?.toLowerCase() === type.toLowerCase());
+    const key = normalizeVehicleType(type);
+    // Try to match from API truck types first.
+    const found = truckTypes.find((t) => normalizeVehicleType(t.name ?? '') === key);
     if (found) return found.name;
-    // Fallback: capitalize the type string
-    switch (type.toLowerCase()) {
-      case 'flatbed':
-        return 'Flatbed';
-      case 'box_truck':
-        return 'Box Truck';
-      case 'tanker':
-        return 'Tanker';
-      case 'tipper':
-        return 'Tipper';
-      case 'refrigerated':
-        return 'Refrigerated';
-      default:
-        return type;
-    }
+    // Known synonym -> clean label.
+    if (VEHICLE_TYPE_LABELS[key]) return VEHICLE_TYPE_LABELS[key];
+    // Fallback: Title Case the normalized value so unknown types still render cleanly.
+    return key
+      .split('_')
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
   };
 
   const handleAddTruck = async () => {

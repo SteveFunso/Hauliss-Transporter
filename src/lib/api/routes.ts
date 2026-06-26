@@ -9,8 +9,10 @@ export type CompanyRoute = {
   destination_address: string;
   dest_lat?: number;
   dest_lng?: number;
-  distance_km: number;
-  estimated_duration_mins: number;
+  // NUMERIC/DECIMAL columns may arrive as JSON strings from the API; the
+  // api-module coerces these to numbers on read (see coerceRoute).
+  distance_km: number | string;
+  estimated_duration_mins: number | string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -34,10 +36,12 @@ export type RoutePricing = {
   route_id: string;
   truck_type: string;
   pricing_type: string;
-  base_fare_minor: number;
-  per_km_rate_minor: number;
-  per_stop_rate_minor: number;
-  flat_rate_minor: number;
+  // NUMERIC columns may arrive as JSON strings; the api-module coerces these to
+  // numbers on read (see coercePricing).
+  base_fare_minor: number | string;
+  per_km_rate_minor: number | string;
+  per_stop_rate_minor: number | string;
+  flat_rate_minor: number | string;
   is_active: boolean;
 };
 
@@ -52,12 +56,33 @@ export type CoverageAreaListParams = {
   limit?: number;
 };
 
-export const getRoutes = (params: RouteListParams = {}) => {
+// The API serializes NUMERIC/DECIMAL columns as JSON strings. Coerce the
+// numeric fields back to real numbers at the boundary so callers can rely on
+// arithmetic/formatting behaving correctly.
+const coerceRoute = (r: CompanyRoute): CompanyRoute => ({
+  ...r,
+  distance_km: Number(r.distance_km),
+  estimated_duration_mins: Number(r.estimated_duration_mins),
+});
+
+const coercePricing = (p: RoutePricing): RoutePricing => ({
+  ...p,
+  base_fare_minor: Number(p.base_fare_minor),
+  per_km_rate_minor: Number(p.per_km_rate_minor),
+  per_stop_rate_minor: Number(p.per_stop_rate_minor),
+  flat_rate_minor: Number(p.flat_rate_minor),
+});
+
+export const getRoutes = async (params: RouteListParams = {}) => {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.is_active) qs.set("is_active", params.is_active);
-  return api.get<ApiResponse<CompanyRoute[]>>(`/api/admin/routes?${qs}`);
+  const res = await api.get<ApiResponse<CompanyRoute[]>>(`/api/admin/routes?${qs}`);
+  if (Array.isArray(res?.data)) {
+    return { ...res, data: res.data.map(coerceRoute) };
+  }
+  return res;
 };
 
 export const createRoute = (data: {
@@ -101,8 +126,13 @@ export const createCoverageArea = (data: {
 export const deleteCoverageArea = (id: string) =>
   api.delete<{ message: string }>(`/api/admin/coverage-areas/${id}`);
 
-export const getRoutePricing = (routeId: string) =>
-  api.get<ApiResponse<RoutePricing[]>>(`/api/admin/routes/${routeId}/pricing`);
+export const getRoutePricing = async (routeId: string) => {
+  const res = await api.get<ApiResponse<RoutePricing[]>>(`/api/admin/routes/${routeId}/pricing`);
+  if (Array.isArray(res?.data)) {
+    return { ...res, data: res.data.map(coercePricing) };
+  }
+  return res;
+};
 
 export const upsertRoutePricing = (data: {
   route_id: string;
