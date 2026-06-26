@@ -14,6 +14,7 @@ export type DisputeListParams = {
   page?: number;
   limit?: number;
   status?: string;
+  search?: string;
 };
 
 export const getDisputes = (params: DisputeListParams = {}) => {
@@ -21,6 +22,7 @@ export const getDisputes = (params: DisputeListParams = {}) => {
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.status && params.status !== "all") qs.set("status", params.status);
+  if (params.search) qs.set("search", params.search);
   return api.get<ApiResponse<AdminDispute[]>>(`/api/admin/disputes?${qs}`);
 };
 

@@ -1017,8 +1017,9 @@ function RoutePricingTab() {
                 <Select
                   value={formData.truck_type}
                   onValueChange={(value) => setFormData({ ...formData, truck_type: value })}
+                  disabled={!!editingPricing}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger disabled={!!editingPricing}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

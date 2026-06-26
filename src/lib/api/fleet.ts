@@ -63,6 +63,9 @@ export const createTruck = (data: {
   driver_id?: string;
 }) => api.post<{ id: string; plate_number: string; message: string }>("/api/admin/fleet/trucks", data);
 
+export const deleteTruck = (id: string) =>
+  api.delete<{ id: string; message: string }>(`/api/admin/fleet/trucks/${id}`);
+
 export const updateTruckType = (id: string, data: Partial<TruckType>) =>
   api.patch<{ message: string }>(`/api/booking/truck-types/${id}`, data);
 

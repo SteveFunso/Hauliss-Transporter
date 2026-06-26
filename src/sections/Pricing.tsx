@@ -120,14 +120,37 @@ export function Pricing() {
       toast.error('Please enter a pricing name');
       return;
     }
+    if (!formData.capacity.trim()) {
+      toast.error('Please enter a capacity');
+      return;
+    }
+    const basePrice = Number(formData.basePrice);
+    const minPrice = Number(formData.minPrice);
+    const maxPrice = Number(formData.maxPrice);
+    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      toast.error('Base price must be greater than 0');
+      return;
+    }
+    if (!Number.isFinite(minPrice) || minPrice <= 0) {
+      toast.error('Min price must be greater than 0');
+      return;
+    }
+    if (!Number.isFinite(maxPrice) || maxPrice <= 0) {
+      toast.error('Max price must be greater than 0');
+      return;
+    }
+    if (minPrice > maxPrice) {
+      toast.error('Min price cannot be greater than max price');
+      return;
+    }
     setFormSaving(true);
     try {
       if (editingConfig) {
         await updateTruckType(editingConfig.id, {
           name: formData.name,
-          base_price: Number(formData.basePrice),
-          min_price: Number(formData.minPrice),
-          max_price: Number(formData.maxPrice),
+          base_price: basePrice,
+          min_price: minPrice,
+          max_price: maxPrice,
           capacity: formData.capacity,
         });
         toast.success('Pricing updated');
@@ -135,9 +158,9 @@ export function Pricing() {
         await createTruckType({
           name: formData.name,
           capacity: formData.capacity,
-          base_price: Number(formData.basePrice),
-          min_price: Number(formData.minPrice),
-          max_price: Number(formData.maxPrice),
+          base_price: basePrice,
+          min_price: minPrice,
+          max_price: maxPrice,
           is_available: true,
         });
         toast.success('Pricing configuration created');

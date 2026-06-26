@@ -53,6 +53,7 @@ import { toast } from 'sonner';
 
 export function Support() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedTicket, setSelectedTicket] = useState<AdminDispute | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
@@ -64,9 +65,22 @@ export function Support() {
 
   const pagination = usePagination(20);
 
+  // Aggregated stat counts across all pages (not just the current page)
+  const [statCounts, setStatCounts] = useState({ open: 0, inProgress: 0, resolved: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      pagination.setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const { data, isLoading, refetch } = useApi(
-    () => getDisputes({ page: pagination.page, limit: pagination.limit, status: statusFilter }),
-    [pagination.page, statusFilter]
+    () => getDisputes({ page: pagination.page, limit: pagination.limit, status: statusFilter, search: debouncedSearch }),
+    [pagination.page, statusFilter, debouncedSearch]
   );
 
   useEffect(() => {
@@ -75,20 +89,46 @@ export function Support() {
     }
   }, [data]);
 
+  // Aggregate status counts across all pages — gateway caps limit at 100, so paginate.
+  const fetchAllStats = async () => {
+    setStatsLoading(true);
+    try {
+      let open = 0, inProgress = 0, resolved = 0;
+      let page = 1;
+      const limit = 100;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const res = await getDisputes({ page, limit, search: debouncedSearch });
+        const rows = res.data ?? [];
+        for (const d of rows) {
+          if (d.status === 'open' || d.status === 'pending') open++;
+          else if (d.status === 'investigating') inProgress++;
+          else if (d.status === 'resolved') resolved++;
+        }
+        const total = res.pagination?.total ?? rows.length;
+        if (page * limit >= total || rows.length === 0) break;
+        page++;
+      }
+      setStatCounts({ open, inProgress, resolved });
+    } catch {
+      // leave previous counts in place on failure
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllStats();
+  }, [debouncedSearch]);
+
   const disputes = data?.data ?? [];
 
-  const filteredTickets = disputes.filter(ticket => {
-    const matchesSearch = !searchQuery ||
-      ticket.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ticket.issue_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ticket.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
+  // Server-side search filters across all pages; render rows as returned.
+  const filteredTickets = disputes;
 
-  // Compute stats from loaded data
-  const openCount = disputes.filter(d => d.status === 'open' || d.status === 'pending').length;
-  const inProgressCount = disputes.filter(d => d.status === 'investigating').length;
-  const resolvedCount = disputes.filter(d => d.status === 'resolved').length;
+  const openCount = statCounts.open;
+  const inProgressCount = statCounts.inProgress;
+  const resolvedCount = statCounts.resolved;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -129,6 +169,7 @@ export function Support() {
       await updateDispute(id, { status: 'resolved' });
       toast.success('Ticket resolved');
       refetch();
+      fetchAllStats();
       if (selectedTicket?.id === id) {
         setSelectedTicket(null);
       }
@@ -142,6 +183,7 @@ export function Support() {
       await updateDispute(id, { status: 'closed' });
       toast.success('Ticket closed');
       refetch();
+      fetchAllStats();
       if (selectedTicket?.id === id) {
         setSelectedTicket(null);
       }
@@ -168,6 +210,7 @@ export function Support() {
       await updateDispute(id, { status: 'closed' });
       toast.success('Ticket archived');
       refetch();
+      fetchAllStats();
       if (selectedTicket?.id === id) {
         setSelectedTicket(null);
       }
@@ -193,6 +236,7 @@ export function Support() {
       setShowNewTicketDialog(false);
       setNewTicket({ subject: '', description: '', issueType: 'late_delivery', priority: 'medium', tripId: '' });
       refetch();
+      fetchAllStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create ticket');
     } finally {
@@ -239,7 +283,7 @@ export function Support() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Open Tickets</p>
-                {isLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
+                {statsLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
                   <p className="text-2xl font-semibold">{openCount}</p>
                 )}
               </div>
@@ -254,7 +298,7 @@ export function Support() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">In Progress</p>
-                {isLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
+                {statsLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
                   <p className="text-2xl font-semibold">{inProgressCount}</p>
                 )}
               </div>
@@ -269,7 +313,7 @@ export function Support() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Resolved</p>
-                {isLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
+                {statsLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
                   <p className="text-2xl font-semibold">{resolvedCount}</p>
                 )}
               </div>

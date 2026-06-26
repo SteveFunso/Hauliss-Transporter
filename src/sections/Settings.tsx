@@ -107,7 +107,7 @@ export function Settings() {
   });
   const [permissionsSaving, setPermissionsSaving] = useState(false);
 
-  const { data: savedSettings, isLoading } = useApi(() => getSettings(), []);
+  const { data: savedSettings, isLoading, refetch } = useApi(() => getSettings(), []);
 
   useEffect(() => {
     if (savedSettings) {
@@ -121,7 +121,7 @@ export function Settings() {
         companyName: readSetting(s.platform_name),
         companyEmail: readSetting(s.platform_email ?? s.contact_email),
         companyPhone: readSetting(s.platform_phone ?? s.contact_phone),
-        companyAddress: '',
+        companyAddress: readSetting(s.company_address),
         timezone: readSetting(s.timezone) || 'Africa/Lagos',
         currency: readSetting(s.currency) || 'NGN',
         notifications: {
@@ -156,6 +156,7 @@ export function Settings() {
         platform_name: settings.companyName,
         platform_email: settings.companyEmail,
         platform_phone: settings.companyPhone,
+        company_address: settings.companyAddress,
         timezone: settings.timezone,
         currency: settings.currency,
         notifications: {
@@ -173,6 +174,8 @@ export function Settings() {
         },
       });
       toast.success('Settings saved successfully');
+      // Refetch so the form reflects persisted values and never drifts.
+      refetch();
     } catch (err: any) {
       toast.error(err.message || 'Failed to save settings');
     } finally {
@@ -424,9 +427,7 @@ export function Settings() {
                     id="companyAddress"
                     value={settings.companyAddress}
                     onChange={(e) => setSettings({...settings, companyAddress: e.target.value})}
-                    disabled
                   />
-                  <p className="text-xs text-muted-foreground">Not yet available</p>
                 </div>
               </CardContent>
             </Card>
@@ -780,7 +781,7 @@ export function Settings() {
                         {regeneratingKey === 'live' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Regenerate
                       </Button>
                     </div>
-                    <p className="text-sm text-muted-foreground">Live API key for production use</p>
+                    <p className="text-sm text-muted-foreground">Placeholder key — server-side API key issuance is not yet available.</p>
                   </div>
                   <div className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-center justify-between mb-2">
@@ -789,7 +790,7 @@ export function Settings() {
                         {regeneratingKey === 'test' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Regenerate
                       </Button>
                     </div>
-                    <p className="text-sm text-muted-foreground">Test API key for development</p>
+                    <p className="text-sm text-muted-foreground">Placeholder key — server-side API key issuance is not yet available.</p>
                   </div>
                 </div>
                 <div className="border-t pt-6">

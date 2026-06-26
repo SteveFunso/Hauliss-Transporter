@@ -57,7 +57,6 @@ export function Wallet() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [refundConfirmOpen, setRefundConfirmOpen] = useState(false);
   const [refundTarget, setRefundTarget] = useState<AdminPayment | null>(null);
-  const [syncLoading, setSyncLoading] = useState(false);
 
   const pagination = usePagination(15);
 
@@ -71,7 +70,7 @@ export function Wallet() {
     [pagination.page, statusFilter, searchQuery]
   );
 
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useApi(
+  const { data: stats, isLoading: statsLoading } = useApi(
     () => getPaymentStats(),
     []
   );
@@ -111,17 +110,6 @@ export function Wallet() {
     a.href = url; a.download = "payments_export.csv"; a.click();
     URL.revokeObjectURL(url);
     toast.success("Payments exported to CSV");
-  };
-
-  const handleSyncBalances = async () => {
-    setSyncLoading(true);
-    try {
-      await refetchStats();
-      await refetch();
-      toast.success("Balances synced successfully");
-    } finally {
-      setSyncLoading(false);
-    }
   };
 
   const downloadReceipt = (payment: AdminPayment) => {
@@ -220,23 +208,22 @@ export function Wallet() {
             Manage transactions, monitor payments, and handle payouts
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={exportCSV}>
-            <Download className="w-4 h-4" />
-            Export
-          </Button>
-          <Button
-            className="bg-[#F97316] hover:bg-[#F97316]/90 text-white gap-2"
-            onClick={handleSyncBalances}
-            disabled={syncLoading}
-          >
-            {syncLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2" onClick={exportCSV}>
+              <Download className="w-4 h-4" />
+              Export
+            </Button>
+            <Button
+              className="bg-[#F97316] hover:bg-[#F97316]/90 text-white gap-2"
+              disabled
+              title="Not yet available"
+            >
               <RefreshCw className="w-4 h-4" />
-            )}
-            Sync Balances
-          </Button>
+              Sync Balances
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Sync Balances: Not yet available</p>
         </div>
       </div>
 
@@ -550,11 +537,8 @@ export function Wallet() {
                                 Refund
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem
-                              className="text-amber-600"
-                              onClick={() => toast.warning("Transaction flagged for review")}
-                            >
-                              <Flag className="w-4 h-4 mr-2" /> Flag Transaction
+                            <DropdownMenuItem disabled title="Not yet available">
+                              <Flag className="w-4 h-4 mr-2" /> Flag Transaction (Not yet available)
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

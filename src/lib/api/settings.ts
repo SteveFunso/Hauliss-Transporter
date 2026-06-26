@@ -9,6 +9,7 @@ export type PlatformSettings = {
   platform_name: SettingValue<string>;
   platform_email: SettingValue<string>;
   platform_phone: SettingValue<string>;
+  company_address: SettingValue<string>;
   timezone: SettingValue<string>;
   currency: SettingValue<string> & { minor_units_per_major?: number };
   commission_rate: number;
@@ -44,6 +45,7 @@ export type PlatformSettingsUpdate = Partial<{
   platform_name: string;
   platform_email: string;
   platform_phone: string;
+  company_address: string;
   timezone: string;
   currency: string;
   commission_rate: number;

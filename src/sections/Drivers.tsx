@@ -268,8 +268,6 @@ export function Drivers() {
           </div>
         </div>
       </TableCell>
-      <TableCell><Skeleton className="h-4 w-10" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-12" /></TableCell>
       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
       <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
       <TableCell className="text-right"><Skeleton className="h-8 w-8 rounded ml-auto" /></TableCell>
@@ -484,7 +482,7 @@ export function Drivers() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search drivers by name, email, or license..."
+                placeholder="Search drivers by name, email, or transporter ID..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -530,8 +528,6 @@ export function Drivers() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[250px]">Driver</TableHead>
-                    <TableHead>Rating</TableHead>
-                    <TableHead>Trips</TableHead>
                     <TableHead>Vehicle</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -548,7 +544,7 @@ export function Drivers() {
                     </>
                   ) : driverList.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                         No drivers found
                       </TableCell>
                     </TableRow>
@@ -572,15 +568,6 @@ export function Drivers() {
                               <p className="text-sm text-muted-foreground">{driver.transporter_id || driver.email}</p>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                            <span className="font-medium">N/A</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium">—</span>
                         </TableCell>
                         <TableCell>
                           <span className="font-medium text-sm">

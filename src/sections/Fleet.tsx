@@ -12,6 +12,7 @@ import {
   Weight,
   Eye,
   Edit,
+  Trash2,
   Settings,
   Filter,
   ChevronLeft,
@@ -46,7 +47,7 @@ import {
 } from '@/components/ui/table';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getFleetAvailability, getFleetStats, getTruckTypes, createTruck, type FleetDriver, type TruckType } from '@/lib/api/fleet';
+import { getFleetAvailability, getFleetStats, getTruckTypes, createTruck, deleteTruck, type FleetDriver, type TruckType } from '@/lib/api/fleet';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MapView } from '@/components/ui/map-view';
@@ -88,7 +89,7 @@ export function Fleet() {
   );
 
   const { data: truckTypesData } = useApi(() => getTruckTypes(), []);
-  const { data: fleetStats, isLoading: statsLoading } = useApi(() => getFleetStats(), []);
+  const { data: fleetStats, isLoading: statsLoading, refetch: refetchStats } = useApi(() => getFleetStats(), []);
 
   const fleetList: FleetDriver[] = (data as any)?.data || [];
   const paginationMeta = (data as any)?.pagination;
@@ -182,6 +183,7 @@ export function Fleet() {
       setAddForm({ plate_number: '', vehicle_type: '', driver_name: '' });
       setAddTruckOpen(false);
       refetch();
+      refetchStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to register truck');
     }
@@ -200,8 +202,25 @@ export function Fleet() {
       setEditTruckOpen(false);
       setEditingTruck(null);
       refetch();
+      refetchStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update truck');
+    }
+  };
+
+  const handleDeleteTruck = async (driver: FleetDriver) => {
+    const label = driver.truck_plate_number || driver.driver_name || 'this truck';
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    try {
+      await deleteTruck(driver.driver_id);
+      toast.success(`Truck "${label}" deleted successfully`);
+      if (selectedFleetDriver?.driver_id === driver.driver_id) {
+        setSelectedFleetDriver(null);
+      }
+      refetch();
+      refetchStats();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete truck');
     }
   };
 
@@ -615,6 +634,12 @@ export function Fleet() {
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info(`Maintenance scheduled for ${driver.truck_plate_number || driver.driver_name}`); }}>
                                 <Settings className="w-4 h-4 mr-2" /> Maintenance
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600 focus:text-red-600"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteTruck(driver); }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Delete Truck
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>

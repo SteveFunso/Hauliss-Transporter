@@ -103,7 +103,8 @@ export function Reports() {
   };
 
   const formatRevenue = (val: number) => {
-    if (val >= 1_000_000) return `₦${(val / 1_000_000).toFixed(0)}M`;
+    if (val >= 1_000_000_000) return `₦${(val / 1_000_000_000).toFixed(1)}B`;
+    if (val >= 1_000_000) return `₦${(val / 1_000_000).toFixed(1)}M`;
     if (val >= 1_000) return `₦${(val / 1_000).toFixed(0)}K`;
     return `₦${val}`;
   };
