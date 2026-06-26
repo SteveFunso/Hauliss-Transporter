@@ -4,13 +4,13 @@ export type FleetDriver = {
   driver_id: string;
   is_online: boolean;
   vehicle_type: string;
-  lat: number;
-  lng: number;
+  lat: number | string;
+  lng: number | string;
   driver_name: string;
   truck_plate_number: string;
-  rating: number;
+  rating: number | string;
   total_trips: number;
-  minutes_away: number;
+  minutes_away: number | null;
   updated_at: string;
 };
 

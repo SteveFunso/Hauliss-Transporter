@@ -47,6 +47,7 @@ export type PlatformSettingsUpdate = Partial<{
   timezone: string;
   currency: string;
   commission_rate: number;
+  platform_commission_rate: { value: number };
   payout_frequency: string;
   min_payout: number;
   payout_fee: number;

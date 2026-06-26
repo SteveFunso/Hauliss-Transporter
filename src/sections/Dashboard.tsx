@@ -4,9 +4,6 @@ import {
   Truck,
   ClipboardList,
   Wallet,
-  MapPin,
-  Clock,
-  CheckCircle,
   MoreVertical,
   AlertCircle,
   Download,
@@ -16,8 +13,6 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatsCard } from '@/components/layout/StatsCard';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu,
@@ -42,9 +37,16 @@ import {
   getDashboardStats,
   getRevenueChart,
   getBookingStatusChart,
-  type DashboardStats
+  getFleetChart,
+  getDriverPerformanceChart,
+  type DashboardStats,
+  type ChartDataPoint
 } from '@/lib/api/dashboard';
 import { toast } from 'sonner';
+
+function navigateToSection(section: string) {
+  window.dispatchEvent(new CustomEvent('navigate:section', { detail: section }));
+}
 
 function StatsCardSkeleton() {
   return (
@@ -72,30 +74,52 @@ function ChartSkeleton({ height = 'h-80' }: { height?: string }) {
 export function Dashboard() {
   const [isVisible, setIsVisible] = useState(false);
 
-  const { data: stats, isLoading: statsLoading, error: statsError } = useApi<DashboardStats>(() => getDashboardStats(), []);
-  const { data: revenueResponse, isLoading: revenueLoading } = useApi(() => getRevenueChart(), []);
-  const { data: bookingResponse, isLoading: bookingLoading } = useApi(() => getBookingStatusChart(), []);
+  const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useApi<DashboardStats>(() => getDashboardStats(), []);
+  const { data: revenueResponse, isLoading: revenueLoading, refetch: refetchRevenue } = useApi(() => getRevenueChart(), []);
+  const { data: bookingResponse, isLoading: bookingLoading, refetch: refetchBooking } = useApi(() => getBookingStatusChart(), []);
+  const { data: fleetResponse, isLoading: fleetLoading, refetch: refetchFleet } = useApi(() => getFleetChart(), []);
+  const { data: driverResponse, isLoading: driverLoading, refetch: refetchDrivers } = useApi(() => getDriverPerformanceChart(), []);
 
   const revenueChartData = revenueResponse?.data || [];
   const bookingStatusData = bookingResponse?.data || [];
+  const fleetDistribution = fleetResponse?.data || [];
+  const driverRatings = driverResponse?.data || [];
 
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 100);
     return () => clearTimeout(timer);
   }, []);
 
-  const recentActivities = [
-    { id: 1, type: 'booking', message: 'New booking #BKG004 created', time: '5 min ago' },
-    { id: 2, type: 'trip', message: 'Trip #BKG001 completed by Ibrahim M.', time: '15 min ago' },
-    { id: 3, type: 'payment', message: 'Payment of ₦45,000 received', time: '1 hour ago' },
-    { id: 4, type: 'driver', message: 'Driver Yusuf B. document verified', time: '2 hours ago' }
-  ];
+  const handleRefresh = () => {
+    refetchStats();
+    refetchRevenue();
+    refetchBooking();
+    refetchFleet();
+    refetchDrivers();
+    toast.success('Dashboard refreshed');
+  };
 
-  const onlineDrivers = [
-    { name: 'Ibrahim Musa', location: 'Oshodi', status: 'in_transit', truck: 'LAGOS-AB123CD' },
-    { name: 'Tunde Afolayan', location: 'Ikeja', status: 'available', truck: 'LAGOS-EF456GH' },
-    { name: 'Emeka Okafor', location: 'Apapa', status: 'in_transit', truck: 'LAGOS-MN012OP' }
-  ];
+  const handleExport = () => {
+    if (!stats) {
+      toast.error('No data to export');
+      return;
+    }
+    const rows: ChartDataPoint[] = Object.entries(stats).map(([key, value]) => ({
+      name: key,
+      value: value as number
+    }));
+    const headers = Object.keys(rows[0]).join(',');
+    const body = rows.map(row => Object.values(row).join(',')).join('\n');
+    const csv = `${headers}\n${body}`;
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dashboard_stats.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Stats exported');
+  };
 
   return (
     <div className={cn(
@@ -173,10 +197,10 @@ export function Dashboard() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => toast.info("Export as CSV — view in section")}>
+                <DropdownMenuItem onClick={handleExport}>
                   <Download className="w-4 h-4 mr-2" /> Export Data
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => toast.info("Refreshing chart data...")}>
+                <DropdownMenuItem onClick={handleRefresh}>
                   <RefreshCw className="w-4 h-4 mr-2" /> Refresh
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -307,159 +331,104 @@ export function Dashboard() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Fleet Distribution */}
         <Card className="border-0 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="font-display font-semibold text-lg">Recent Activity</CardTitle>
+            <div>
+              <CardTitle className="font-display font-semibold text-lg">Fleet Distribution</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Trucks by type</p>
+            </div>
             <Button
               variant="ghost"
               size="sm"
               className="text-sm text-[#F97316]"
-              onClick={() => toast.info("Activity log — view in section")}
+              onClick={() => navigateToSection('fleet')}
             >
               View All
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3">
-                  <div className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
-                    activity.type === 'booking' && 'bg-blue-100 text-blue-600',
-                    activity.type === 'trip' && 'bg-emerald-100 text-emerald-600',
-                    activity.type === 'payment' && 'bg-amber-100 text-amber-600',
-                    activity.type === 'driver' && 'bg-purple-100 text-purple-600'
-                  )}>
-                    {activity.type === 'booking' && <ClipboardList className="w-4 h-4" />}
-                    {activity.type === 'trip' && <CheckCircle className="w-4 h-4" />}
-                    {activity.type === 'payment' && <Wallet className="w-4 h-4" />}
-                    {activity.type === 'driver' && <Users className="w-4 h-4" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm">{activity.message}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Online Drivers */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="font-display font-semibold text-lg">Online Drivers</CardTitle>
-            <p className="text-sm text-muted-foreground">{onlineDrivers.length} drivers currently online</p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {onlineDrivers.map((driver, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
-                  onClick={() => toast.info(`${driver.name} — ${driver.truck}, ${driver.location} (${driver.status === 'in_transit' ? 'In Transit' : 'Available'})`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F97316] to-[#111111] flex items-center justify-center">
-                      <span className="text-white text-xs font-medium">
-                        {driver.name.split(' ').map(n => n[0]).join('')}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{driver.name}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {driver.location}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={driver.status === 'in_transit' ? 'default' : 'secondary'}
-                    className={cn(
-                      driver.status === 'in_transit' && 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
-                      driver.status === 'available' && 'bg-blue-100 text-blue-700 hover:bg-blue-100'
-                    )}
-                  >
-                    {driver.status === 'in_transit' ? (
-                      <><Clock className="w-3 h-3 mr-1" /> In Transit</>
-                    ) : (
-                      <><CheckCircle className="w-3 h-3 mr-1" /> Available</>
-                    )}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Fleet Utilization */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="font-display font-semibold text-lg">Fleet Utilization</CardTitle>
-            <p className="text-sm text-muted-foreground">This week's performance</p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-muted-foreground">Utilization Rate</span>
-                  <span className="font-medium">78%</span>
-                </div>
-                <Progress value={78} className="h-2" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div
-                  className="text-center p-4 rounded-xl bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => toast.info("Trip details — view in section")}
-                >
-                  <p className="text-2xl font-bold text-[#F97316]">156</p>
-                  <p className="text-xs text-muted-foreground mt-1">Trips This Week</p>
-                </div>
-                <div
-                  className="text-center p-4 rounded-xl bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => toast.info("On-time report — view in section")}
-                >
-                  <p className="text-2xl font-bold text-[#111111]">92%</p>
-                  <p className="text-xs text-muted-foreground mt-1">On-Time Rate</p>
-                </div>
-              </div>
-
+            {fleetLoading ? (
               <div className="space-y-3">
-                <div
-                  className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
-                  onClick={() => toast.info("Available trucks list — view in section")}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-sm">Available Trucks</span>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Skeleton className="w-3 h-3 rounded-full" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-8 ml-auto" />
                   </div>
-                  <span className="text-sm font-medium">652</span>
-                </div>
-                <div
-                  className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
-                  onClick={() => toast.info("In-transit trucks list — view in section")}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-[#F97316]" />
-                    <span className="text-sm">In Transit</span>
-                  </div>
-                  <span className="text-sm font-medium">306</span>
-                </div>
-                <div
-                  className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
-                  onClick={() => toast.info("Maintenance list — view in section")}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-gray-400" />
-                    <span className="text-sm">In Maintenance</span>
-                  </div>
-                  <span className="text-sm font-medium">87</span>
-                </div>
+                ))}
               </div>
+            ) : (
+              <div className="space-y-3">
+                {fleetDistribution.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
+                    onClick={() => navigateToSection('fleet')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-sm text-muted-foreground">{item.name}</span>
+                    </div>
+                    <span className="text-sm font-medium">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Driver Ratings */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="font-display font-semibold text-lg">Driver Ratings</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Rating distribution</p>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-sm text-[#F97316]"
+              onClick={() => navigateToSection('drivers')}
+            >
+              View All
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {driverLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Skeleton className="w-3 h-3 rounded-full" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-8 ml-auto" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {driverRatings.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between cursor-pointer rounded-lg p-2 -mx-2 hover:bg-muted/50 transition-colors"
+                    onClick={() => navigateToSection('drivers')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-sm text-muted-foreground">{item.name}</span>
+                    </div>
+                    <span className="text-sm font-medium">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

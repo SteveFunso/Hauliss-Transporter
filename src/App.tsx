@@ -87,6 +87,15 @@ function AppContent() {
     setActiveSection(section);
   };
 
+  useEffect(() => {
+    const handleNavigate = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail;
+      if (section) setActiveSection(section);
+    };
+    window.addEventListener("navigate:section", handleNavigate);
+    return () => window.removeEventListener("navigate:section", handleNavigate);
+  }, []);
+
   return (
     <div className={cn(
       'min-h-screen bg-background transition-all duration-300',

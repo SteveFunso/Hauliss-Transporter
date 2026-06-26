@@ -33,6 +33,7 @@ export type DriverListParams = {
   limit?: number;
   status?: string;
   search?: string;
+  vehicle_type?: string;
 };
 
 export const getDrivers = (params: DriverListParams = {}) => {
@@ -41,6 +42,7 @@ export const getDrivers = (params: DriverListParams = {}) => {
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.status && params.status !== "all") qs.set("status", params.status);
   if (params.search) qs.set("search", params.search);
+  if (params.vehicle_type) qs.set("vehicle_type", params.vehicle_type);
   return api.get<ApiResponse<AdminDriver[]>>(`/api/admin/drivers?${qs}`);
 };
 

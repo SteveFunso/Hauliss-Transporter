@@ -175,23 +175,16 @@ export function Support() {
     }
   };
 
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
   const handleNewTicketSubmit = async () => {
     if (!newTicket.subject.trim() || !newTicket.description.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
-    // The disputes endpoint requires a real trip UUID. Validate up-front so we
-    // don't fire a request that always 400s with a synthetic id.
-    if (!UUID_RE.test(newTicket.tripId.trim())) {
-      toast.error('A valid Trip ID (UUID) is required to submit a ticket');
-      return;
-    }
     setTicketSubmitting(true);
     try {
+      const tripId = newTicket.tripId.trim();
       await createDispute({
-        trip_id: newTicket.tripId.trim(),
+        ...(tripId ? { trip_id: tripId } : {}),
         issue_type: newTicket.issueType,
         description: `[${newTicket.priority.toUpperCase()}] ${newTicket.subject}\n\n${newTicket.description}`,
       });

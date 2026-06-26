@@ -40,16 +40,16 @@ export function Reports() {
   const [dateRange, setDateRange] = useState<string>('30d');
 
   const { data: revenueData, isLoading: revenueLoading } = useApi(
-    () => getReport('revenue'),
+    () => getReport('revenue', dateRange),
     [selectedReport, dateRange]
   );
   const { data: fleetData, isLoading: fleetLoading } = useApi(
-    () => getReport('fleet'),
-    []
+    () => getReport('fleet', dateRange),
+    [dateRange]
   );
   const { data: driverData } = useApi(
-    () => getReport('drivers'),
-    []
+    () => getReport('drivers', dateRange),
+    [dateRange]
   );
   const { data: stats, isLoading: statsLoading } = useApi(
     () => getDashboardStats(),
@@ -348,20 +348,19 @@ export function Reports() {
         </Card>
       </div>
 
-      {/* Recent Reports (static section, kept for UI completeness) */}
+      {/* Quick Reports (templates for jumping to a report view) */}
       <Card className="border-0 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="font-display font-semibold text-lg">
-            Recent Reports
+            Quick Reports
           </CardTitle>
-          <Button variant="ghost" className="text-[#F97316]" onClick={() => toast.info('Showing all generated reports...')}>View All</Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {[
-              { id: 1, name: 'Revenue Report - Latest', type: 'revenue', date: new Date().toISOString() },
-              { id: 2, name: 'Fleet Utilization - Latest', type: 'fleet', date: new Date().toISOString() },
-              { id: 3, name: 'Driver Performance - Latest', type: 'drivers', date: new Date().toISOString() },
+              { id: 1, name: 'Revenue Report', type: 'revenue' },
+              { id: 2, name: 'Fleet Utilization', type: 'fleet' },
+              { id: 3, name: 'Driver Performance', type: 'drivers' },
             ].map((report) => (
               <div key={report.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted/80 transition-colors">
                 <div className="flex items-center gap-4">
@@ -370,9 +369,6 @@ export function Reports() {
                   </div>
                   <div>
                     <p className="font-medium">{report.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Generated on {new Date(report.date).toLocaleDateString()}
-                    </p>
                   </div>
                 </div>
                 <Button

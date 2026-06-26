@@ -43,7 +43,7 @@ import { toast } from 'sonner';
 
 type PricingConfig = TruckType & { active: boolean };
 
-const defaultFormData = { name: '', truckType: 'flatbed', basePrice: '', minPrice: '', maxPrice: '', capacity: '' };
+const defaultFormData = { name: '', basePrice: '', minPrice: '', maxPrice: '', capacity: '' };
 
 export function Pricing() {
   const { data: truckTypes, isLoading, refetch } = useApi(() => getTruckTypes(), []);
@@ -67,8 +67,9 @@ export function Pricing() {
 
   useEffect(() => {
     if (settings) {
-      const cr = settings.commission_rate;
-      setCommissionRate(typeof cr === 'object' ? (cr as any)?.value ?? 10 : cr ?? 10);
+      const pcr = settings.platform_commission_rate;
+      const ratePct = (typeof pcr === 'object' ? Number((pcr as any)?.value) : Number(pcr)) * 100;
+      setCommissionRate(Number.isFinite(ratePct) ? ratePct : 10);
     }
   }, [settings]);
 
@@ -107,7 +108,6 @@ export function Pricing() {
     setEditingConfig(config);
     setFormData({
       name: config.name,
-      truckType: config.name.toLowerCase().replace(/\s/g, '_'),
       basePrice: String(config.base_price),
       minPrice: String(config.min_price),
       maxPrice: String(config.max_price),
@@ -156,7 +156,7 @@ export function Pricing() {
   const handleSaveCommission = async () => {
     setSavingCommission(true);
     try {
-      await updateSettings({ commission_rate: commissionRate });
+      await updateSettings({ platform_commission_rate: { value: commissionRate / 100 } });
       toast.success('Commission rates updated');
     } catch (err: any) {
       toast.error(err.message || 'Failed to update commission');
@@ -396,20 +396,6 @@ export function Pricing() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Truck Type</Label>
-              <select
-                value={formData.truckType}
-                onChange={(e) => setFormData({ ...formData, truckType: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
-              >
-                <option value="flatbed">Flatbed</option>
-                <option value="box_truck">Box Truck</option>
-                <option value="tanker">Tanker</option>
-                <option value="tipper">Tipper</option>
-                <option value="refrigerated">Refrigerated</option>
-              </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

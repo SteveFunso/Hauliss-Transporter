@@ -87,6 +87,10 @@ export function Drivers() {
     transporter_id: '',
   });
 
+  // Advanced filter state
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState('');
+
   const pagination = usePagination(20);
 
   const { data: statsData, isLoading: statsLoading } = useApi(
@@ -100,8 +104,9 @@ export function Drivers() {
       limit: pagination.limit,
       status: statusFilter,
       search: searchQuery || undefined,
+      vehicle_type: vehicleTypeFilter || undefined,
     }),
-    [pagination.page, statusFilter, searchQuery]
+    [pagination.page, statusFilter, searchQuery, vehicleTypeFilter]
   );
 
   const driverList: AdminDriver[] = (data as any)?.data || [];
@@ -149,11 +154,6 @@ export function Drivers() {
 
   const [addLoading, setAddLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
-
-  // Advanced filter state
-  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
-  const [vehicleTypeFilter, setVehicleTypeFilter] = useState('');
-  const [companyFilter, setCompanyFilter] = useState('');
 
   // Earnings dialog state
   const [earningsOpen, setEarningsOpen] = useState(false);
@@ -849,25 +849,14 @@ export function Drivers() {
                 onChange={(e) => setVehicleTypeFilter(e.target.value)}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="filter-company">Company</Label>
-              <Input
-                id="filter-company"
-                placeholder="Filter by company name"
-                value={companyFilter}
-                onChange={(e) => setCompanyFilter(e.target.value)}
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setVehicleTypeFilter('');
-              setCompanyFilter('');
             }}>
               Clear Filters
             </Button>
             <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={() => {
-              setSearchQuery([vehicleTypeFilter, companyFilter].filter(Boolean).join(' '));
               pagination.setPage(1);
               setAdvancedFilterOpen(false);
             }}>
