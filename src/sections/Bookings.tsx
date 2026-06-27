@@ -342,7 +342,7 @@ export function Bookings() {
                 <option value="PENDING">Pending</option>
                 <option value="SCHEDULED">Scheduled</option>
                 <option value="CONFIRMED">Confirmed</option>
-                <option value="IN_TRANSIT">In Progress</option>
+                <option value="in_progress">In Progress</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="PAID">Paid</option>
                 <option value="CANCELLED">Cancelled</option>
@@ -483,7 +483,7 @@ export function Bookings() {
                 <option value="PENDING">Pending</option>
                 <option value="SCHEDULED">Scheduled</option>
                 <option value="CONFIRMED">Confirmed</option>
-                <option value="IN_TRANSIT">In Progress</option>
+                <option value="in_progress">In Progress</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="PAID">Paid</option>
                 <option value="CANCELLED">Cancelled</option>

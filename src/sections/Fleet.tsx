@@ -85,7 +85,7 @@ export function Fleet() {
       limit: pagination.limit,
       is_online: statusFilter === 'available' ? 'true' : statusFilter === 'offline' ? 'false' : undefined,
     }),
-    [pagination.page, statusFilter]
+    [pagination.page, pagination.limit, statusFilter]
   );
 
   const { data: truckTypesData } = useApi(() => getTruckTypes(), []);
@@ -201,6 +201,11 @@ export function Fleet() {
       toast.success(`Truck "${editForm.plate_number}" updated successfully`);
       setEditTruckOpen(false);
       setEditingTruck(null);
+      // Clear the Details panel so it doesn't show a stale snapshot of the
+      // truck we just edited (the refetched list carries the saved values).
+      if (selectedFleetDriver?.driver_id === editingTruck.driver_id) {
+        setSelectedFleetDriver(null);
+      }
       refetch();
       refetchStats();
     } catch (err: any) {

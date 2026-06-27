@@ -102,7 +102,7 @@ export function Support() {
         const rows = res.data ?? [];
         for (const d of rows) {
           if (d.status === 'open' || d.status === 'pending') open++;
-          else if (d.status === 'investigating') inProgress++;
+          else if (d.status === 'investigating' || d.status === 'in_progress') inProgress++;
           else if (d.status === 'resolved') resolved++;
         }
         const total = res.pagination?.total ?? rows.length;

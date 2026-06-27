@@ -34,4 +34,4 @@ export const createDispute = (data: {
   issue_type: string;
   description: string;
   evidence_url?: string;
-}) => api.post<{ dispute_id: string; message: string }>("/api/admin/disputes", data);
+}) => api.post<{ id: string; status: string; message: string }>("/api/admin/disputes", data);

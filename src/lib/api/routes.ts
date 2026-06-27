@@ -26,7 +26,9 @@ export type CoverageArea = {
   state: string;
   latitude?: number;
   longitude?: number;
-  radius_km: number;
+  // NUMERIC column may arrive as a JSON string; the api-module coerces this to
+  // a number on read (see coerceArea).
+  radius_km: number | string;
   is_active: boolean;
   created_at: string;
 };
@@ -63,6 +65,11 @@ const coerceRoute = (r: CompanyRoute): CompanyRoute => ({
   ...r,
   distance_km: Number(r.distance_km),
   estimated_duration_mins: Number(r.estimated_duration_mins),
+});
+
+const coerceArea = (a: CoverageArea): CoverageArea => ({
+  ...a,
+  radius_km: Number(a.radius_km),
 });
 
 const coercePricing = (p: RoutePricing): RoutePricing => ({
@@ -108,11 +115,15 @@ export const updateRoute = (
 export const deleteRoute = (id: string) =>
   api.delete<{ message: string }>(`/api/admin/routes/${id}`);
 
-export const getCoverageAreas = (params: CoverageAreaListParams = {}) => {
+export const getCoverageAreas = async (params: CoverageAreaListParams = {}) => {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
-  return api.get<ApiResponse<CoverageArea[]>>(`/api/admin/coverage-areas?${qs}`);
+  const res = await api.get<ApiResponse<CoverageArea[]>>(`/api/admin/coverage-areas?${qs}`);
+  if (Array.isArray(res?.data)) {
+    return { ...res, data: res.data.map(coerceArea) };
+  }
+  return res;
 };
 
 export const createCoverageArea = (data: {
