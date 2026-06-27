@@ -875,11 +875,11 @@ export function Drivers() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-4 rounded-lg bg-muted/50">
-                  <p className="text-2xl font-bold text-[#F97316]">--</p>
+                  <p className="text-2xl font-bold text-[#F97316]">—</p>
                   <p className="text-xs text-muted-foreground mt-1">Total Trips</p>
                 </div>
                 <div className="text-center p-4 rounded-lg bg-muted/50">
-                  <p className="text-2xl font-bold text-[#111111]">--</p>
+                  <p className="text-2xl font-bold text-[#111111]">—</p>
                   <p className="text-xs text-muted-foreground mt-1">Total Earnings</p>
                 </div>
               </div>

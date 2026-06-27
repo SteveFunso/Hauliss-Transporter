@@ -38,6 +38,9 @@ export type BookingStats = {
   in_progress: number;
   completed: number;
   cancelled: number;
+  paid: number;
+  confirmed: number;
+  scheduled: number;
 };
 
 export type BookingListParams = {
