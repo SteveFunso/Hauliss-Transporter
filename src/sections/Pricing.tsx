@@ -177,6 +177,10 @@ export function Pricing() {
   };
 
   const handleSaveCommission = async () => {
+    if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 100) {
+      toast.error('Commission must be a number between 0 and 100');
+      return;
+    }
     setSavingCommission(true);
     try {
       await updateSettings({ platform_commission_rate: { value: commissionRate / 100 } });

@@ -84,12 +84,12 @@ export function Settings() {
   const [regeneratingKey, setRegeneratingKey] = useState<'live' | 'test' | null>(null);
   const [flutterwaveEnabled, setFlutterwaveEnabled] = useState(false);
   const [flutterwaveSaving, setFlutterwaveSaving] = useState(false);
-  const [integrations, setIntegrations] = useState<Record<string, boolean>>({
-    'Google Maps': true,
-    'Paystack': true,
-    'Twilio SMS': true,
-    'SendGrid Email': true,
-  });
+  // Known integrations the UI can toggle. All default to false so nothing shows
+  // as enabled until the server says so — the persisted state is the source of truth.
+  const KNOWN_INTEGRATIONS = ['Google Maps', 'Paystack', 'Twilio SMS', 'SendGrid Email'];
+  const [integrations, setIntegrations] = useState<Record<string, boolean>>(
+    Object.fromEntries(KNOWN_INTEGRATIONS.map((name) => [name, false]))
+  );
   const [integrationSaving, setIntegrationSaving] = useState<string | null>(null);
   const [notifSaving, setNotifSaving] = useState<string | null>(null);
   const [inviteSending, setInviteSending] = useState(false);
@@ -140,9 +140,11 @@ export function Settings() {
       });
       // Hydrate server-persisted toggles that previously reset to defaults on reload.
       setFlutterwaveEnabled(savedSettings.flutterwave_enabled ?? false);
-      if (savedSettings.integrations) {
-        setIntegrations((prev) => ({ ...prev, ...savedSettings.integrations }));
-      }
+      // Reflect only what the server actually persisted. Known integrations seed to
+      // false, then any server-enabled flags overlay on top — absent/unknown stay off.
+      const serverIntegrations = (savedSettings.integrations ?? {}) as Record<string, boolean>;
+      const base = Object.fromEntries(KNOWN_INTEGRATIONS.map((name) => [name, false]));
+      setIntegrations({ ...base, ...serverIntegrations });
       // Load API keys from settings if available, otherwise generate initial ones
       setLiveApiKey(s.live_api_key || generateApiKey('pk_live_'));
       setTestApiKey(s.test_api_key || generateApiKey('pk_test_'));

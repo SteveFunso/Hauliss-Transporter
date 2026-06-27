@@ -180,6 +180,8 @@ export function Bookings() {
         return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Scheduled</Badge>;
       case 'confirmed':
         return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Confirmed</Badge>;
+      case 'dispatched':
+        return <Badge className="bg-cyan-100 text-cyan-700 hover:bg-cyan-100">Dispatched</Badge>;
       case 'in_transit':
         return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">In Progress</Badge>;
       case 'completed':

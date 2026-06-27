@@ -65,8 +65,9 @@ export function Support() {
 
   const pagination = usePagination(20);
 
-  // Aggregated stat counts across all pages (not just the current page)
-  const [statCounts, setStatCounts] = useState({ open: 0, inProgress: 0, resolved: 0 });
+  // Aggregated stat counts across all pages (not just the current page).
+  // Buckets mirror the real dispute statuses: pending, investigating, resolved, closed.
+  const [statCounts, setStatCounts] = useState({ pending: 0, investigating: 0, resolved: 0, closed: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
 
   // Debounce search input
@@ -93,7 +94,7 @@ export function Support() {
   const fetchAllStats = async () => {
     setStatsLoading(true);
     try {
-      let open = 0, inProgress = 0, resolved = 0;
+      let pending = 0, investigating = 0, resolved = 0, closed = 0;
       let page = 1;
       const limit = 100;
       // eslint-disable-next-line no-constant-condition
@@ -101,15 +102,16 @@ export function Support() {
         const res = await getDisputes({ page, limit, search: debouncedSearch });
         const rows = res.data ?? [];
         for (const d of rows) {
-          if (d.status === 'open' || d.status === 'pending') open++;
-          else if (d.status === 'investigating' || d.status === 'in_progress') inProgress++;
+          if (d.status === 'pending') pending++;
+          else if (d.status === 'investigating') investigating++;
           else if (d.status === 'resolved') resolved++;
+          else if (d.status === 'closed') closed++;
         }
         const total = res.pagination?.total ?? rows.length;
         if (page * limit >= total || rows.length === 0) break;
         page++;
       }
-      setStatCounts({ open, inProgress, resolved });
+      setStatCounts({ pending, investigating, resolved, closed });
     } catch {
       // leave previous counts in place on failure
     } finally {
@@ -126,9 +128,10 @@ export function Support() {
   // Server-side search filters across all pages; render rows as returned.
   const filteredTickets = disputes;
 
-  const openCount = statCounts.open;
-  const inProgressCount = statCounts.inProgress;
+  const pendingCount = statCounts.pending;
+  const investigatingCount = statCounts.investigating;
   const resolvedCount = statCounts.resolved;
+  const closedCount = statCounts.closed;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -230,7 +233,9 @@ export function Support() {
       await createDispute({
         ...(tripId ? { trip_id: tripId } : {}),
         issue_type: newTicket.issueType,
-        description: `[${newTicket.priority.toUpperCase()}] ${newTicket.subject}\n\n${newTicket.description}`,
+        // Subject/Priority aren't stored as structured columns, so encode them
+        // legibly into the description where operators can read them.
+        description: `Subject: ${newTicket.subject}\nPriority: ${newTicket.priority.toUpperCase()}\n\n${newTicket.description}`,
       });
       toast.success('Support ticket created');
       setShowNewTicketDialog(false);
@@ -282,9 +287,9 @@ export function Support() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Open Tickets</p>
+                <p className="text-sm text-muted-foreground">Pending</p>
                 {statsLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
-                  <p className="text-2xl font-semibold">{openCount}</p>
+                  <p className="text-2xl font-semibold">{pendingCount}</p>
                 )}
               </div>
               <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
@@ -299,7 +304,7 @@ export function Support() {
               <div>
                 <p className="text-sm text-muted-foreground">In Progress</p>
                 {statsLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
-                  <p className="text-2xl font-semibold">{inProgressCount}</p>
+                  <p className="text-2xl font-semibold">{investigatingCount}</p>
                 )}
               </div>
               <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
@@ -342,9 +347,9 @@ export function Support() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">This Page</p>
-                {isLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
-                  <p className="text-2xl font-semibold">{disputes.length}</p>
+                <p className="text-sm text-muted-foreground">Closed</p>
+                {statsLoading ? <Skeleton className="h-8 w-12 mt-1" /> : (
+                  <p className="text-2xl font-semibold">{closedCount}</p>
                 )}
               </div>
               <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
