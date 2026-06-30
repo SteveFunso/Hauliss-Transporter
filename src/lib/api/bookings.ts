@@ -28,6 +28,10 @@ export type AdminBooking = {
     contact_name: string;
     contact_phone: string;
   } | null;
+  truck_type_name?: string;
+  driver_name?: string;
+  carrier_name?: string;
+  schedule?: { pickup_date?: string; pickup_time?: string };
   created_at: string;
   updated_at: string;
 };

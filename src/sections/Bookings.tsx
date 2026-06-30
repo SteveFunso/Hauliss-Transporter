@@ -569,7 +569,9 @@ export function Bookings() {
                           <TableCell>
                             <div>
                               <p className="text-sm font-medium">{booking.cargo?.category ?? 'N/A'}</p>
-                              <p className="text-xs text-muted-foreground">{booking.cargo?.weight ?? 'N/A'}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {booking.truck_type_name ?? booking.cargo?.weight ?? 'N/A'}
+                              </p>
                             </div>
                           </TableCell>
                           <TableCell>{getStatusBadge(booking.status)}</TableCell>
@@ -603,6 +605,30 @@ export function Bookings() {
                                       <XCircle className="w-4 h-4 mr-2" /> Cancel
                                     </DropdownMenuItem>
                                   </>
+                                )}
+                                {booking.status.toLowerCase() === 'assigned' && (
+                                  <DropdownMenuItem
+                                    onClick={(e) => { e.stopPropagation(); handleStatusUpdate(booking.id, 'DISPATCHED'); }}
+                                    disabled={actionLoading === booking.id}
+                                  >
+                                    <Navigation className="w-4 h-4 mr-2" /> Mark Dispatched
+                                  </DropdownMenuItem>
+                                )}
+                                {booking.status.toLowerCase() === 'dispatched' && (
+                                  <DropdownMenuItem
+                                    onClick={(e) => { e.stopPropagation(); handleStatusUpdate(booking.id, 'IN_TRANSIT'); }}
+                                    disabled={actionLoading === booking.id}
+                                  >
+                                    <Navigation className="w-4 h-4 mr-2" /> Mark In Transit
+                                  </DropdownMenuItem>
+                                )}
+                                {booking.status.toLowerCase() === 'in_transit' && (
+                                  <DropdownMenuItem
+                                    onClick={(e) => { e.stopPropagation(); handleStatusUpdate(booking.id, 'COMPLETED'); }}
+                                    disabled={actionLoading === booking.id}
+                                  >
+                                    <CheckCircle className="w-4 h-4 mr-2" /> Mark Completed
+                                  </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info("Opening chat..."); }}>
                                   <MessageSquare className="w-4 h-4 mr-2" /> Chat with Driver
@@ -771,6 +797,43 @@ export function Bookings() {
                   )}
                 </div>
 
+                {/* Assignment & Schedule */}
+                {(selectedBooking.carrier_name || selectedBooking.truck_type_name || selectedBooking.driver_name || selectedBooking.schedule?.pickup_date || selectedBooking.schedule?.pickup_time) && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium flex items-center gap-2">
+                      <Navigation className="w-4 h-4 text-[#F97316]" /> Assignment & Schedule
+                    </h4>
+                    <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                      {selectedBooking.carrier_name && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Carrier</span>
+                          <span className="text-sm font-medium">{selectedBooking.carrier_name}</span>
+                        </div>
+                      )}
+                      {selectedBooking.truck_type_name && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Truck Type</span>
+                          <span className="text-sm font-medium">{selectedBooking.truck_type_name}</span>
+                        </div>
+                      )}
+                      {selectedBooking.driver_name && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Driver</span>
+                          <span className="text-sm font-medium">{selectedBooking.driver_name}</span>
+                        </div>
+                      )}
+                      {(selectedBooking.schedule?.pickup_date || selectedBooking.schedule?.pickup_time) && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Scheduled Pickup</span>
+                          <span className="text-sm font-medium">
+                            {[selectedBooking.schedule?.pickup_date, selectedBooking.schedule?.pickup_time].filter(Boolean).join(' ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="space-y-2">
                   {selectedBooking.status.toLowerCase() === 'pending' && (
@@ -809,6 +872,34 @@ export function Bookings() {
                         <Navigation className="w-4 h-4 mr-2" />
                       )}
                       Mark In Progress
+                    </Button>
+                  )}
+                  {selectedBooking.status.toLowerCase() === 'assigned' && (
+                    <Button
+                      className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
+                      onClick={() => handleStatusUpdate(selectedBooking.id, 'DISPATCHED')}
+                      disabled={actionLoading === selectedBooking.id}
+                    >
+                      {actionLoading === selectedBooking.id ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Navigation className="w-4 h-4 mr-2" />
+                      )}
+                      Mark Dispatched
+                    </Button>
+                  )}
+                  {selectedBooking.status.toLowerCase() === 'dispatched' && (
+                    <Button
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                      onClick={() => handleStatusUpdate(selectedBooking.id, 'IN_TRANSIT')}
+                      disabled={actionLoading === selectedBooking.id}
+                    >
+                      {actionLoading === selectedBooking.id ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Navigation className="w-4 h-4 mr-2" />
+                      )}
+                      Mark In Transit
                     </Button>
                   )}
                   {selectedBooking.status.toLowerCase() === 'in_transit' && (
