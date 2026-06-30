@@ -51,6 +51,8 @@ import { usePagination } from '@/hooks/usePagination';
 import { getDisputes, updateDispute, createDispute, type AdminDispute } from '@/lib/api/disputes';
 import { toast } from 'sonner';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function Support() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -227,9 +229,13 @@ export function Support() {
       toast.error('Please fill in all required fields');
       return;
     }
+    const tripId = newTicket.tripId.trim();
+    if (tripId && !UUID_PATTERN.test(tripId)) {
+      toast.error('Enter a valid Trip ID (UUID) or leave blank');
+      return;
+    }
     setTicketSubmitting(true);
     try {
-      const tripId = newTicket.tripId.trim();
       await createDispute({
         ...(tripId ? { trip_id: tripId } : {}),
         issue_type: newTicket.issueType,
@@ -710,6 +716,9 @@ export function Support() {
                 value={newTicket.tripId}
                 onChange={(e) => setNewTicket({ ...newTicket, tripId: e.target.value })}
               />
+              {newTicket.tripId.trim() && !UUID_PATTERN.test(newTicket.tripId.trim()) && (
+                <p className="text-sm text-red-500">Enter a valid Trip ID (UUID) or leave blank</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="ticket-subject">Subject</Label>

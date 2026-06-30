@@ -81,6 +81,7 @@ const emptyForm: NewBookingForm = {
 
 export function Bookings() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedBooking, setSelectedBooking] = useState<AdminBooking | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -102,14 +103,24 @@ export function Bookings() {
 
   const pagination = usePagination(15);
 
+  // Debounce search input so the list only refetches after typing pauses,
+  // and reset to page 1 so a new search never lands on a stale page 2+.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      pagination.setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const { data: bookingsData, isLoading, error, refetch } = useApi<ApiResponse<AdminBooking[]>>(
     () => getBookings({
       page: pagination.page,
       limit: pagination.limit,
       status: statusFilter !== 'all' ? statusFilter : undefined,
-      search: searchQuery || undefined,
+      search: debouncedSearch || undefined,
     }),
-    [pagination.page, statusFilter, searchQuery]
+    [pagination.page, statusFilter, debouncedSearch]
   );
 
   const { data: stats, isLoading: statsLoading } = useApi(

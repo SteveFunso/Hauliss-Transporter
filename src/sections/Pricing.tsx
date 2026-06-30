@@ -46,7 +46,7 @@ type PricingConfig = TruckType & { active: boolean };
 const defaultFormData = { name: '', basePrice: '', minPrice: '', maxPrice: '', capacity: '' };
 
 export function Pricing() {
-  const { data: truckTypes, isLoading, refetch } = useApi(() => getTruckTypes(), []);
+  const { data: truckTypes, isLoading, error, refetch } = useApi(() => getTruckTypes(), []);
   const { data: settings } = useApi(() => getSettings(), []);
   const [configs, setConfigs] = useState<PricingConfig[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -241,6 +241,15 @@ export function Pricing() {
                   <Skeleton className="h-6 w-12 rounded-full" />
                 </div>
               ))}
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <p className="text-red-500 mb-2">{error}</p>
+              <Button variant="outline" onClick={refetch}>Try Again</Button>
+            </div>
+          ) : configs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No pricing models found
             </div>
           ) : (
             <Table>
