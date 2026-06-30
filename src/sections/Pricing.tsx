@@ -272,13 +272,13 @@ export function Pricing() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">₦{config.base_price.toLocaleString()}</span>
+                      <span className="font-medium">₦{Number(config.base_price ?? 0).toLocaleString()}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">₦{config.min_price.toLocaleString()}</span>
+                      <span className="font-medium">₦{Number(config.min_price ?? 0).toLocaleString()}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">₦{config.max_price.toLocaleString()}</span>
+                      <span className="font-medium">₦{Number(config.max_price ?? 0).toLocaleString()}</span>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{config.rating != null ? Number(config.rating).toFixed(1) : 'N/A'}</span>
