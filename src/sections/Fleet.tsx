@@ -437,7 +437,7 @@ export function Fleet() {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => toast.info('In-transit tracking — view details')}>
+        <Card className="border-0 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -470,7 +470,7 @@ export function Fleet() {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => toast.info(`${truckTypes.length} truck types available`)}>
+        <Card className="border-0 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -546,7 +546,7 @@ export function Fleet() {
                   <option key={vt} value={vt}>{getTruckTypeLabel(vt)}</option>
                 ))}
               </select>
-              <Button variant="outline" size="icon" onClick={() => toast.info('Advanced filters — view details')}>
+              <Button variant="outline" size="icon" disabled title="Advanced filters coming soon">
                 <Filter className="w-4 h-4" />
               </Button>
             </div>
@@ -634,10 +634,10 @@ export function Fleet() {
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(driver); }}>
                                 <Edit className="w-4 h-4 mr-2" /> Edit Truck
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info(`Opening live tracking for ${driver.truck_plate_number || driver.driver_name}...`); }}>
+                              <DropdownMenuItem disabled>
                                 <MapPin className="w-4 h-4 mr-2" /> Track Location
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info(`Maintenance scheduled for ${driver.truck_plate_number || driver.driver_name}`); }}>
+                              <DropdownMenuItem disabled>
                                 <Settings className="w-4 h-4 mr-2" /> Maintenance
                               </DropdownMenuItem>
                               <DropdownMenuItem
@@ -785,13 +785,15 @@ export function Fleet() {
                 <div className="flex gap-2">
                   <Button
                     className="flex-1 bg-[#F97316] hover:bg-[#F97316]/90 text-white"
-                    onClick={() => toast.info(`Opening live tracking for ${selectedFleetDriver.truck_plate_number || selectedFleetDriver.driver_name}...`)}
+                    disabled
+                    title="Live tracking coming soon"
                   >
                     <MapPin className="w-4 h-4 mr-2" /> Track Location
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => toast.info(`Maintenance scheduled for ${selectedFleetDriver.truck_plate_number || selectedFleetDriver.driver_name}`)}
+                    disabled
+                    title="Maintenance scheduling coming soon"
                   >
                     <Settings className="w-4 h-4" />
                   </Button>

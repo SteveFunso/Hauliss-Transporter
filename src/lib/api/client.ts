@@ -36,10 +36,15 @@ async function refreshAccessToken(): Promise<string | null> {
 
     if (!res.ok) return null;
 
-    const data = await res.json();
-    localStorage.setItem("hauliss_access_token", data.access_token);
-    localStorage.setItem("hauliss_refresh_token", data.refresh_token);
-    return data.access_token;
+    // The refresh endpoint returns the standard envelope {status_code,message,data:{...}};
+    // unwrap data before reading the tokens (reading data.access_token directly yields
+    // undefined and force-logs-out the user on every access-token expiry).
+    const body = await res.json();
+    const tokens = body?.data ?? body;
+    if (!tokens?.access_token) return null;
+    localStorage.setItem("hauliss_access_token", tokens.access_token);
+    if (tokens.refresh_token) localStorage.setItem("hauliss_refresh_token", tokens.refresh_token);
+    return tokens.access_token;
   } catch {
     return null;
   }

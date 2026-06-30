@@ -252,9 +252,8 @@ export function Drivers() {
     return Math.round((approved / docs.length) * 100);
   };
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  };
+  const getInitials = (name?: string) =>
+    (name || '').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
   // Loading skeleton for table rows
   const TableRowSkeleton = () => (
