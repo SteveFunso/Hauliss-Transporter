@@ -65,6 +65,18 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Cross-section navigation events (e.g. Dashboard tiles). Must be declared
+  // BEFORE the early returns below — hooks after a conditional return violate
+  // the Rules of Hooks (React #310: more hooks after login than before).
+  useEffect(() => {
+    const handleNavigate = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail;
+      if (section) setActiveSection(section);
+    };
+    window.addEventListener("navigate:section", handleNavigate);
+    return () => window.removeEventListener("navigate:section", handleNavigate);
+  }, []);
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#000000] via-[#111111] to-[#0a0a0a]">
@@ -86,15 +98,6 @@ function AppContent() {
   const handleSetActiveSection = (section: string) => {
     setActiveSection(section);
   };
-
-  useEffect(() => {
-    const handleNavigate = (e: Event) => {
-      const section = (e as CustomEvent<string>).detail;
-      if (section) setActiveSection(section);
-    };
-    window.addEventListener("navigate:section", handleNavigate);
-    return () => window.removeEventListener("navigate:section", handleNavigate);
-  }, []);
 
   return (
     <div className={cn(
