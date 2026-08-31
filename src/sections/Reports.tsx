@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Download,
   FileText,
@@ -38,6 +38,10 @@ const reportTypes = [
 export function Reports() {
   const [selectedReport, setSelectedReport] = useState<string>('revenue');
   const [dateRange, setDateRange] = useState<string>('30d');
+  // BUG-005: the report content lives ~200px above the Quick Reports card, so
+  // "View" must bring it on screen — before, it only wrote state (a no-op for
+  // the default row) and nothing visibly happened.
+  const chartsRef = useRef<HTMLDivElement>(null);
 
   const { data: revenueData, isLoading: revenueLoading } = useApi(
     () => getReport('revenue', dateRange),
@@ -141,7 +145,7 @@ export function Reports() {
       </div>
 
       {/* Report Type Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div ref={chartsRef} className="flex gap-2 overflow-x-auto pb-2">
         {reportTypes.map((report) => (
           <button
             key={report.id}
@@ -378,7 +382,8 @@ export function Reports() {
                   className="gap-2"
                   onClick={() => {
                     setSelectedReport(report.type);
-                    toast.info('Opening report...');
+                    chartsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    toast.success(`Showing ${report.name}`);
                   }}
                 >
                   <Eye className="w-4 h-4" />

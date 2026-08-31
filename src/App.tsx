@@ -9,6 +9,7 @@ import { Bookings } from '@/sections/Bookings';
 import { Wallet } from '@/sections/Wallet';
 import { Pricing } from '@/sections/Pricing';
 import { Reports } from '@/sections/Reports';
+import { Compliance } from '@/sections/Compliance';
 import { Support } from '@/sections/Support';
 import { Settings } from '@/sections/Settings';
 import { Routes } from '@/sections/Routes';
@@ -31,7 +32,9 @@ const sectionComponents: Record<string, React.ReactNode> = {
   pricing: <Pricing />,
   reports: <Reports />,
   support: <Support />,
-  compliance: <Reports />,
+  // BUG-006: was `<Reports />` — the Compliance nav item literally re-rendered
+  // the Reports page. Now a real driver-document compliance view.
+  compliance: <Compliance />,
   settings: <Settings />,
 };
 
@@ -48,7 +51,7 @@ const sectionTitles: Record<string, string> = {
   pricing: 'Pricing Configuration',
   reports: 'Reports & Analytics',
   support: 'Support Tickets',
-  compliance: 'Compliance & Reports',
+  compliance: 'Compliance',
   settings: 'Settings',
 };
 
