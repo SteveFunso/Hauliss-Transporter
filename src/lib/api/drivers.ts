@@ -23,6 +23,7 @@ export type DriverDocument = {
   issued_date: string;
   expiry_date: string | null;
   status: string;
+  rejection_reason?: string | null;
   image_url: string;
   created_at: string;
   updated_at: string;
@@ -57,3 +58,9 @@ export const updateDriver = (id: string, data: Partial<AdminDriver>) =>
 
 export const getDriverDocuments = (driverId: string) =>
   api.get<{ documents: DriverDocument[] }>(`/api/driver/documents?driver_id=${driverId}`);
+
+// BUG-001/002: this portal previously had NO document-review call at all —
+// "Verify Documents" was a display-only stub. Same endpoint the super-admin
+// portal uses; `reason` is required by the backend when rejecting.
+export const reviewDriverDocument = (documentId: string, status: 'verified' | 'rejected', reason?: string) =>
+  api.patch<DriverDocument>(`/api/driver/documents/${documentId}`, reason ? { status, reason } : { status });

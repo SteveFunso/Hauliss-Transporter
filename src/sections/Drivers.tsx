@@ -52,7 +52,7 @@ import {
 } from '@/components/ui/table';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getDrivers, getDriverDocuments, updateDriverStatus, updateDriver, type AdminDriver, type DriverDocument } from '@/lib/api/drivers';
+import { getDrivers, getDriverDocuments, reviewDriverDocument, updateDriverStatus, updateDriver, type AdminDriver, type DriverDocument } from '@/lib/api/drivers';
 import { getUserStats, createUser } from '@/lib/api/users';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -135,6 +135,37 @@ export function Drivers() {
       })
       .finally(() => setDocsLoading(false));
   }, [selectedDriver?.id]);
+
+  // BUG-001/002: real document review — this panel previously had no
+  // approve/reject controls at all (rows were click-to-toast stubs).
+  const [docActionLoading, setDocActionLoading] = useState<string | null>(null);
+  const handleReviewDocument = useCallback(async (doc: DriverDocument, status: 'verified' | 'rejected') => {
+    if (!selectedDriver) return;
+    let reason: string | undefined;
+    if (status === 'rejected') {
+      const input = window.prompt('Reason for rejecting this document (sent to the driver):');
+      if (input === null) return;
+      reason = input.trim();
+      if (!reason) {
+        toast.error('A rejection reason is required');
+        return;
+      }
+    }
+    setDocActionLoading(doc.id);
+    try {
+      await reviewDriverDocument(doc.id, status, reason);
+      toast.success(`${doc.title} ${status === 'verified' ? 'approved' : 'rejected'}`);
+      const res = await getDriverDocuments(selectedDriver.id);
+      setDriverDocs(res.documents || []);
+      // Once all documents are verified the backend activates the driver —
+      // refresh the list so the status column updates.
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to review document');
+    } finally {
+      setDocActionLoading(null);
+    }
+  }, [selectedDriver, refetch]);
 
   const handleStatusChange = useCallback(async (driverId: string, newStatus: string, label: string) => {
     setActionLoading(driverId);
@@ -235,6 +266,10 @@ export function Drivers() {
 
   const getDocumentStatus = (status: string) => {
     switch (status) {
+      // The backend vocabulary is 'verified' (BUG-001 QA follow-up: this
+      // component compared against 'approved', so verified docs rendered as
+      // "unknown" and progress stuck at 0%). 'approved' kept for safety.
+      case 'verified':
       case 'approved':
         return <CheckCircle className="w-4 h-4 text-emerald-500" />;
       case 'pending':
@@ -248,8 +283,8 @@ export function Drivers() {
 
   const getVerificationProgress = (docs: DriverDocument[]) => {
     if (docs.length === 0) return 0;
-    const approved = docs.filter(d => d.status === 'approved').length;
-    return Math.round((approved / docs.length) * 100);
+    const verified = docs.filter(d => d.status === 'verified' || d.status === 'approved').length;
+    return Math.round((verified / docs.length) * 100);
   };
 
   const getInitials = (name?: string) =>
@@ -754,13 +789,37 @@ export function Drivers() {
                   ) : (
                     <div className="space-y-2">
                       {driverDocs.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted/80 transition-colors"
-                          onClick={() => toast.info(`${doc.title}: Status is "${doc.status}". ${doc.status === 'pending' ? 'Awaiting review.' : doc.status === 'approved' ? 'Verified and approved.' : doc.status === 'rejected' ? 'Rejected - reupload required.' : 'Status unknown.'}`)}
-                        >
-                          <span className="text-sm">{doc.title}</span>
-                          {getDocumentStatus(doc.status)}
+                        <div key={doc.id} className="p-3 rounded-lg bg-muted/50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">{doc.title}</span>
+                            <div className="flex items-center gap-2">
+                              {getDocumentStatus(doc.status)}
+                              {doc.status === 'pending' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="h-7 px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    disabled={docActionLoading === doc.id}
+                                    onClick={() => handleReviewDocument(doc, 'verified')}
+                                  >
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 px-2"
+                                    disabled={docActionLoading === doc.id}
+                                    onClick={() => handleReviewDocument(doc, 'rejected')}
+                                  >
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {doc.status === 'rejected' && doc.rejection_reason && (
+                            <p className="mt-1 text-xs text-red-600">Reason: {doc.rejection_reason}</p>
+                          )}
                         </div>
                       ))}
                     </div>
