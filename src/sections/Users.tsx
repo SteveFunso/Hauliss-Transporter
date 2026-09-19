@@ -1,3 +1,4 @@
+import { realPhotoUrl } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import {
   Search,
@@ -360,7 +361,7 @@ export function Users() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar>
-                              <AvatarImage src={user.profile_photo_url} alt={user.full_name} />
+                              <AvatarImage src={realPhotoUrl(user.profile_photo_url)} alt={user.full_name} />
                               <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white">
                                 {user.full_name?.split(' ').map(n => n[0]).join('') || '?'}
                               </AvatarFallback>
@@ -631,7 +632,7 @@ export function Users() {
             <div className="space-y-4 py-2">
               <div className="flex items-center gap-4">
                 <Avatar className="w-16 h-16">
-                  <AvatarImage src={viewProfileUser.profile_photo_url} alt={viewProfileUser.full_name} />
+                  <AvatarImage src={realPhotoUrl(viewProfileUser.profile_photo_url)} alt={viewProfileUser.full_name} />
                   <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white text-lg">
                     {viewProfileUser.full_name?.split(' ').map(n => n[0]).join('') || '?'}
                   </AvatarFallback>

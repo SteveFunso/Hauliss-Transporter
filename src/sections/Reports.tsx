@@ -24,6 +24,8 @@ import {
   Bar
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useApi } from '@/hooks/useApi';
 import { getReport, getDashboardStats, type ChartDataPoint } from '@/lib/api/dashboard';
 import { toast } from 'sonner';
@@ -43,6 +45,7 @@ export function Reports() {
   // the default row) and nothing visibly happened.
   const chartsRef = useRef<HTMLDivElement>(null);
 
+
   const { data: revenueData, isLoading: revenueLoading } = useApi(
     () => getReport('revenue', dateRange),
     [selectedReport, dateRange]
@@ -59,6 +62,13 @@ export function Reports() {
     () => getDashboardStats(),
     []
   );
+
+  // QA 2026-09 (BUG-005): "View" only scrolled and toasted. It now opens a full report viewer.
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const viewerData: ChartDataPoint[] =
+    (selectedReport === 'revenue' ? revenueData?.data : selectedReport === 'fleet' ? fleetData?.data : driverData?.data) || [];
+  const viewerMeta = reportTypes.find((r) => r.id === selectedReport);
+  const rangeLabel = ({ '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days', '1y': 'Last year' } as Record<string, string>)[dateRange] || dateRange;
 
   const handleExport = () => {
     let csvData: ChartDataPoint[] = [];
@@ -91,7 +101,7 @@ export function Reports() {
     a.download = `${filename}_${dateRange}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Report exported');
+    toast.success(`Downloaded ${filename}_${dateRange}.csv (${csvData.length} rows)`);
   };
 
   const getReportIcon = (type: string) => {
@@ -382,8 +392,7 @@ export function Reports() {
                   className="gap-2"
                   onClick={() => {
                     setSelectedReport(report.type);
-                    chartsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    toast.success(`Showing ${report.name}`);
+                    setViewerOpen(true);
                   }}
                 >
                   <Eye className="w-4 h-4" />
@@ -394,6 +403,66 @@ export function Reports() {
           </div>
         </CardContent>
       </Card>
+      {/* Full report viewer */}
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewerMeta && <viewerMeta.icon className="w-5 h-5 text-[#F97316]" />}
+              {viewerMeta?.name || 'Report'} · {rangeLabel}
+            </DialogTitle>
+            <DialogDescription>Generated from live platform data. Export downloads exactly the rows shown below.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="h-72">
+              {viewerData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">No data for this period.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  {selectedReport === 'revenue' ? (
+                    <LineChart data={viewerData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="name" stroke="#888" fontSize={12} />
+                      <YAxis stroke="#888" fontSize={12} tickFormatter={(v) => formatRevenue(v)} />
+                      <Tooltip formatter={(v: any) => formatRevenue(Number(v))} />
+                      <Line type="monotone" dataKey="value" stroke="#F97316" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  ) : (
+                    <BarChart data={viewerData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="name" stroke="#888" fontSize={12} />
+                      <YAxis stroke="#888" fontSize={12} />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#F97316" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  )}
+                </ResponsiveContainer>
+              )}
+            </div>
+            {viewerData.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>{Object.keys(viewerData[0]).map((k) => <TableHead key={k} className="capitalize">{k.replace(/_/g, ' ')}</TableHead>)}</TableRow>
+                </TableHeader>
+                <TableBody>
+                  {viewerData.map((row, i) => (
+                    <TableRow key={i}>
+                      {Object.entries(row).map(([k, v]) => (
+                        <TableCell key={k}>{selectedReport === 'revenue' && k !== 'name' && typeof v === 'number' ? formatRevenue(v) : String(v ?? '—')}</TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setViewerOpen(false)}>Close</Button>
+              <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white gap-2" onClick={handleExport} disabled={viewerData.length === 0}><Download className="w-4 h-4" />Export CSV</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

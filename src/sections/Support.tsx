@@ -46,6 +46,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
 import { getDisputes, updateDispute, createDispute, type AdminDispute } from '@/lib/api/disputes';
@@ -169,9 +170,27 @@ export function Support() {
     }
   };
 
-  const handleResolve = async (id: string) => {
+  // QA 2026-09: Resolve/Archive acted instantly from a menu click. They now confirm and record a note.
+  const [confirmAction, setConfirmAction] = useState<{ id: string; kind: 'resolve' | 'archive'; subject?: string } | null>(null);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  const runConfirmedAction = async () => {
+    if (!confirmAction) return;
+    setConfirmBusy(true);
     try {
-      await updateDispute(id, { status: 'resolved' });
+      if (confirmAction.kind === 'resolve') await handleResolve(confirmAction.id, resolutionNote.trim() || undefined);
+      else await handleArchive(confirmAction.id);
+      setConfirmAction(null);
+      setResolutionNote('');
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const handleResolve = async (id: string, note?: string) => {
+    try {
+      await updateDispute(id, note ? { status: 'resolved', response: note } : { status: 'resolved' });
       toast.success('Ticket resolved');
       refetch();
       fetchAllStats();
@@ -476,10 +495,10 @@ export function Support() {
                                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleViewDetailsAndReply(ticket); }}>
                                   <MessageSquare className="w-4 h-4 mr-2" /> Reply
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleResolve(ticket.id); }}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setConfirmAction({ id: ticket.id, kind: 'resolve', subject: (ticket as any).subject }); }}>
                                   <CheckCircle className="w-4 h-4 mr-2" /> Resolve
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleArchive(ticket.id); }}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setConfirmAction({ id: ticket.id, kind: 'archive', subject: (ticket as any).subject }); }}>
                                   <Archive className="w-4 h-4 mr-2" /> Archive
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -781,6 +800,33 @@ export function Support() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Confirm resolve / archive */}
+      <AlertDialog open={!!confirmAction} onOpenChange={(o) => { if (!o) { setConfirmAction(null); setResolutionNote(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmAction?.kind === 'resolve' ? 'Resolve this ticket?' : 'Archive this ticket?'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.subject ? `"${confirmAction.subject}". ` : ''}
+              {confirmAction?.kind === 'resolve'
+                ? 'The customer is notified that the issue is resolved. Add a short resolution note for the record.'
+                : 'The ticket is closed and moved out of the active queue.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirmAction?.kind === 'resolve' && (
+            <div className="grid gap-2">
+              <Label htmlFor="resolution-note">Resolution note (optional)</Label>
+              <Textarea id="resolution-note" rows={3} value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)} placeholder="What was done to resolve this?" />
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={confirmBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-[#F97316] hover:bg-[#F97316]/90" disabled={confirmBusy} onClick={(e) => { e.preventDefault(); runConfirmedAction(); }}>
+              {confirmBusy ? 'Saving…' : confirmAction?.kind === 'resolve' ? 'Resolve Ticket' : 'Archive Ticket'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

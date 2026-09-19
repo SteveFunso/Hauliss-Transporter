@@ -64,3 +64,8 @@ export const getDriverDocuments = (driverId: string) =>
 // portal uses; `reason` is required by the backend when rejecting.
 export const reviewDriverDocument = (documentId: string, status: 'verified' | 'rejected', reason?: string) =>
   api.patch<DriverDocument>(`/api/driver/documents/${documentId}`, reason ? { status, reason } : { status });
+
+// QA 2026-09 (KPI consistency): the Drivers page previously showed USER stats
+// ("active users") in the driver cards. This is the driver-scoped summary.
+export type DriverStats = { total: number; active: number; pending_activation: number; blocked: number };
+export const getDriverStats = () => api.get<DriverStats>("/api/admin/drivers/stats");

@@ -29,6 +29,7 @@ export type AdminBooking = {
     contact_phone: string;
   } | null;
   truck_type_name?: string;
+  driver_id?: string | null;
   driver_name?: string;
   carrier_name?: string;
   schedule?: { pickup_date?: string; pickup_time?: string };
@@ -86,3 +87,7 @@ export const createBooking = (data: {
   cargo: { category: data.cargo_type, weight: data.cargo_weight },
   truck_type_id: data.truck_type,
 });
+
+// QA 2026-09: generic PATCH used by the Edit Booking dialog (status / truck_type_id / driver_id).
+export const updateBooking = (id: string, data: Record<string, string | null>) =>
+  api.patch<{ message: string; id: string }>(`/api/admin/bookings/${id}`, data);

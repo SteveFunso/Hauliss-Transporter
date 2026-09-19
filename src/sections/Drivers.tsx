@@ -1,3 +1,4 @@
+import { realPhotoUrl } from '@/lib/utils';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Search,
@@ -52,8 +53,8 @@ import {
 } from '@/components/ui/table';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getDrivers, getDriverDocuments, reviewDriverDocument, updateDriverStatus, updateDriver, type AdminDriver, type DriverDocument } from '@/lib/api/drivers';
-import { getUserStats, createUser } from '@/lib/api/users';
+import { getDrivers, getDriverDocuments, reviewDriverDocument, updateDriverStatus, updateDriver, getDriverStats, type AdminDriver, type DriverDocument } from '@/lib/api/drivers';
+import { createUser } from '@/lib/api/users';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -93,8 +94,9 @@ export function Drivers() {
 
   const pagination = usePagination(20);
 
-  const { data: statsData, isLoading: statsLoading } = useApi(
-    () => getUserStats(),
+  // KPI cards read DRIVER stats (was user stats: "Active Drivers 63" against "Total Drivers 29").
+  const { data: statsData, isLoading: statsLoading, refetch: refetchStats } = useApi(
+    () => getDriverStats(),
     []
   );
 
@@ -159,7 +161,7 @@ export function Drivers() {
       setDriverDocs(res.documents || []);
       // Once all documents are verified the backend activates the driver —
       // refresh the list so the status column updates.
-      refetch();
+      refetch(); refetchStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to review document');
     } finally {
@@ -172,7 +174,7 @@ export function Drivers() {
     try {
       await updateDriverStatus(driverId, newStatus);
       toast.success(`Driver ${label} successfully`);
-      refetch();
+      refetch(); refetchStats();
       if (selectedDriver?.id === driverId) {
         setSelectedDriver(null);
       }
@@ -209,7 +211,7 @@ export function Drivers() {
       toast.success(`Driver invitation sent to ${addForm.email}`);
       setAddForm({ email: '', full_name: '', phone: '', company: '', transporter_id: '' });
       setAddDriverOpen(false);
-      refetch();
+      refetch(); refetchStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create driver');
     } finally {
@@ -230,7 +232,7 @@ export function Drivers() {
       toast.success(`Driver "${editForm.full_name}" updated successfully`);
       setEditDriverOpen(false);
       setEditingDriver(null);
-      refetch();
+      refetch(); refetchStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update driver');
     } finally {
@@ -451,7 +453,7 @@ export function Drivers() {
                 {statsLoading ? (
                   <Skeleton className="h-8 w-16 mt-1" />
                 ) : (
-                  <p className="text-2xl font-semibold">{statsData?.drivers?.toLocaleString() ?? '—'}</p>
+                  <p className="text-2xl font-semibold">{statsData?.total?.toLocaleString() ?? '—'}</p>
                 )}
               </div>
               <div className="w-12 h-12 rounded-xl bg-[#F97316]/10 flex items-center justify-center">
@@ -485,7 +487,7 @@ export function Drivers() {
                 {statsLoading ? (
                   <Skeleton className="h-8 w-16 mt-1" />
                 ) : (
-                  <p className="text-2xl font-semibold">{statsData?.pending?.toLocaleString() ?? '—'}</p>
+                  <p className="text-2xl font-semibold">{statsData?.pending_activation?.toLocaleString() ?? '—'}</p>
                 )}
               </div>
               <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
@@ -592,7 +594,7 @@ export function Drivers() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar>
-                              <AvatarImage src={driver.profile_photo_url} alt={driver.full_name} />
+                              <AvatarImage src={realPhotoUrl(driver.profile_photo_url)} alt={driver.full_name} />
                               <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white">
                                 {getInitials(driver.full_name)}
                               </AvatarFallback>
@@ -725,7 +727,7 @@ export function Drivers() {
                 {/* Profile */}
                 <div className="flex items-center gap-4">
                   <Avatar className="w-16 h-16">
-                    <AvatarImage src={selectedDriver.profile_photo_url} alt={selectedDriver.full_name} />
+                    <AvatarImage src={realPhotoUrl(selectedDriver.profile_photo_url)} alt={selectedDriver.full_name} />
                     <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white text-lg">
                       {getInitials(selectedDriver.full_name)}
                     </AvatarFallback>
@@ -921,7 +923,7 @@ export function Drivers() {
             <div className="space-y-4 py-4">
               <div className="flex items-center gap-3">
                 <Avatar>
-                  <AvatarImage src={earningsDriver.profile_photo_url} alt={earningsDriver.full_name} />
+                  <AvatarImage src={realPhotoUrl(earningsDriver.profile_photo_url)} alt={earningsDriver.full_name} />
                   <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white">
                     {getInitials(earningsDriver.full_name)}
                   </AvatarFallback>
