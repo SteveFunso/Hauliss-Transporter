@@ -25,13 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,7 +45,8 @@ import { MapView } from '@/components/ui/map-view';
 import { useAddressAutocomplete } from '@/hooks/useAddressAutocomplete';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getBookings, getBookingStats, updateBookingStatus, createBooking, type AdminBooking } from '@/lib/api/bookings';
+import { getBookings, getBookingStats, updateBookingStatus, updateBooking, createBooking, type AdminBooking } from '@/lib/api/bookings';
+import { getDrivers, type AdminDriver } from '@/lib/api/drivers';
 import { getTruckTypes, type TruckType } from '@/lib/api/fleet';
 import type { ApiResponse } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -102,6 +97,73 @@ export function Bookings() {
   });
 
   const pagination = usePagination(15);
+
+
+  // QA 2026-09: "Edit Booking", "Chat with Driver" and "Call Customer" were toast-only.
+
+  const [editBooking, setEditBooking] = useState<AdminBooking | null>(null);
+
+  const [editForm, setEditForm] = useState<{ status: string; truck_type_id: string; driver_id: string }>({ status: '', truck_type_id: '', driver_id: '' });
+
+  const [editSaving, setEditSaving] = useState(false);
+
+  const [contactBooking, setContactBooking] = useState<AdminBooking | null>(null);
+
+  const { data: driversForEdit } = useApi(() => getDrivers({ page: 1, limit: 100 }), []);
+
+  const editDrivers: AdminDriver[] = (driversForEdit as any)?.data || [];
+
+  const driverPhoneFor = (b: AdminBooking | null) => (b?.driver_id ? editDrivers.find((d) => d.id === b.driver_id)?.phone_number : undefined) || undefined;
+
+  const waLink = (phone?: string) => phone ? `https://wa.me/${phone.replace(/\D/g, '').replace(/^0/, '234')}` : undefined;
+
+  const openEdit = (b: AdminBooking) => {
+
+    setEditForm({ status: b.status, truck_type_id: b.truck_type_id || '', driver_id: b.driver_id || '' });
+
+    setEditBooking(b);
+
+  };
+
+  const handleSaveEdit = async () => {
+
+    if (!editBooking) return;
+
+    const patch: Record<string, string | null> = {};
+
+    if (editForm.status && editForm.status !== editBooking.status) patch.status = editForm.status;
+
+    if ((editForm.truck_type_id || '') !== (editBooking.truck_type_id || '')) patch.truck_type_id = editForm.truck_type_id || null;
+
+    if ((editForm.driver_id || '') !== (editBooking.driver_id || '')) patch.driver_id = editForm.driver_id || null;
+
+    if (Object.keys(patch).length === 0) { toast.info('No changes to save'); return; }
+
+    setEditSaving(true);
+
+    try {
+
+      await updateBooking(editBooking.id, patch);
+
+      toast.success('Booking updated');
+
+      setEditBooking(null);
+
+      refetch();
+
+    } catch (err: any) { toast.error(err.message || 'Failed to update booking'); } finally { setEditSaving(false); }
+
+  };
+
+  const callCustomer = (b: AdminBooking) => {
+
+    const phone = b.pickup?.contact_phone || b.dropoff?.contact_phone;
+
+    if (!phone) { toast.error('No customer phone number on this booking'); return; }
+
+    window.location.href = `tel:${phone}`;
+
+  };
 
   // Debounce search input so the list only refetches after typing pauses,
   // and reset to page 1 so a new search never lands on a stale page 2+.
@@ -597,7 +659,7 @@ export function Bookings() {
                                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedBooking(booking); }}>
                                   <Eye className="w-4 h-4 mr-2" /> View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info("Edit booking — view details"); }}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEdit(booking); }}>
                                   <Edit className="w-4 h-4 mr-2" /> Edit Booking
                                 </DropdownMenuItem>
                                 {booking.status.toLowerCase() === 'pending' && (
@@ -641,10 +703,10 @@ export function Bookings() {
                                     <CheckCircle className="w-4 h-4 mr-2" /> Mark Completed
                                   </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info("Opening chat..."); }}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setContactBooking(booking); }}>
                                   <MessageSquare className="w-4 h-4 mr-2" /> Chat with Driver
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.info("Calling customer..."); }}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); callCustomer(booking); }}>
                                   <Phone className="w-4 h-4 mr-2" /> Call Customer
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -930,14 +992,14 @@ export function Bookings() {
                   <div className="flex gap-2">
                     <Button
                       className="flex-1 bg-[#F97316] hover:bg-[#F97316]/90 text-white"
-                      onClick={() => toast.info("Opening chat...")}
+                      onClick={() => setContactBooking(selectedBooking)}
                     >
                       <MessageSquare className="w-4 h-4 mr-2" /> Chat
                     </Button>
                     <Button
                       className="flex-1"
                       variant="outline"
-                      onClick={() => toast.info("Calling...")}
+                      onClick={() => callCustomer(selectedBooking)}
                     >
                       <Phone className="w-4 h-4 mr-2" /> Call
                     </Button>
@@ -955,6 +1017,82 @@ export function Bookings() {
           )}
         </div>
       </div>
+      {/* Edit Booking (PATCH status / truck type / driver) */}
+      <Dialog open={!!editBooking} onOpenChange={(o) => { if (!o) setEditBooking(null); }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Edit Booking{editBooking ? ` · #${editBooking.id.slice(0, 8).toUpperCase()}` : ''}</DialogTitle>
+            <DialogDescription>Change the status, truck type or assigned driver. Route and cargo are set by the customer.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <select id="edit-status" value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20">
+                {['PENDING', 'CONFIRMED', 'ASSIGNED', 'DISPATCHED', 'IN_TRANSIT', 'COMPLETED', 'CANCELLED'].map((st) => (
+                  <option key={st} value={st}>{st.replace('_', ' ')}</option>
+                ))}
+                {editForm.status && !['PENDING', 'CONFIRMED', 'ASSIGNED', 'DISPATCHED', 'IN_TRANSIT', 'COMPLETED', 'CANCELLED'].includes(editForm.status) && (
+                  <option value={editForm.status}>{editForm.status}</option>
+                )}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-truck-type">Truck type</Label>
+              <select id="edit-truck-type" value={editForm.truck_type_id} onChange={(e) => setEditForm({ ...editForm, truck_type_id: e.target.value })}
+                className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20">
+                <option value="">Keep current</option>
+                {truckTypes.map((tt) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-driver">Assigned driver</Label>
+              <select id="edit-driver" value={editForm.driver_id} onChange={(e) => setEditForm({ ...editForm, driver_id: e.target.value })}
+                className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20">
+                <option value="">Unassigned</option>
+                {editDrivers.map((d) => <option key={d.id} value={d.id}>{d.full_name || d.email}{d.status !== 'active' ? ` (${d.status})` : ''}</option>)}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditBooking(null)} disabled={editSaving}>Cancel</Button>
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleSaveEdit} disabled={editSaving}>{editSaving ? 'Saving…' : 'Save Changes'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Contact driver / customer */}
+      <Dialog open={!!contactBooking} onOpenChange={(o) => { if (!o) setContactBooking(null); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Contact</DialogTitle>
+            <DialogDescription>In-app driver chat lives in the Hauliss driver and shipper apps. From the portal you can reach people directly.</DialogDescription>
+          </DialogHeader>
+          {contactBooking && (
+            <div className="space-y-4 py-2 text-sm">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="font-medium">Driver · {contactBooking.driver_name || 'Not assigned yet'}</p>
+                {driverPhoneFor(contactBooking) ? (
+                  <div className="flex gap-2 mt-2">
+                    <Button asChild size="sm" className="bg-[#F97316] hover:bg-[#F97316]/90 text-white"><a href={`tel:${driverPhoneFor(contactBooking)}`}><Phone className="w-4 h-4 mr-2" />Call {driverPhoneFor(contactBooking)}</a></Button>
+                    <Button asChild size="sm" variant="outline"><a href={waLink(driverPhoneFor(contactBooking))} target="_blank" rel="noreferrer"><MessageSquare className="w-4 h-4 mr-2" />WhatsApp</a></Button>
+                  </div>
+                ) : <p className="text-muted-foreground mt-1">{contactBooking.driver_id ? 'No phone number on the driver profile.' : 'Assign a driver to contact them.'}</p>}
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="font-medium">Customer · {contactBooking.pickup?.contact_name || contactBooking.dropoff?.contact_name || 'Shipper'}</p>
+                {(contactBooking.pickup?.contact_phone || contactBooking.dropoff?.contact_phone) ? (
+                  <div className="flex gap-2 mt-2">
+                    <Button asChild size="sm" className="bg-[#F97316] hover:bg-[#F97316]/90 text-white"><a href={`tel:${contactBooking.pickup?.contact_phone || contactBooking.dropoff?.contact_phone}`}><Phone className="w-4 h-4 mr-2" />Call {contactBooking.pickup?.contact_phone || contactBooking.dropoff?.contact_phone}</a></Button>
+                    <Button asChild size="sm" variant="outline"><a href={waLink(contactBooking.pickup?.contact_phone || contactBooking.dropoff?.contact_phone)} target="_blank" rel="noreferrer"><MessageSquare className="w-4 h-4 mr-2" />WhatsApp</a></Button>
+                  </div>
+                ) : <p className="text-muted-foreground mt-1">No customer phone number on this booking.</p>}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Dashboard } from '@/sections/Dashboard';
 import { Users } from '@/sections/Users';
 import { Drivers } from '@/sections/Drivers';
 import { Fleet } from '@/sections/Fleet';
+import { LiveTracking } from '@/sections/LiveTracking';
 import { Bookings } from '@/sections/Bookings';
 import { Wallet } from '@/sections/Wallet';
 import { Pricing } from '@/sections/Pricing';
@@ -26,7 +27,8 @@ const sectionComponents: Record<string, React.ReactNode> = {
   fleet: <Fleet />,
   routes: <Routes />,
   bookings: <Bookings />,
-  tracking: <Fleet />,
+  // QA 2026-09: was `<Fleet />` — the Live Tracking nav item re-rendered Fleet Management.
+  tracking: <LiveTracking />,
   wallet: <Wallet />,
   payments: <Wallet />,
   pricing: <Pricing />,
