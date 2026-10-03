@@ -83,7 +83,11 @@ export const preRegisterDriver = (data: {
   license_number?: string;
   company_name?: string;
   transporter_id?: string;
-}) => api.post<{ driver_id: string; status: string; message: string }>("/api/admin/drivers/pre-register", data);
+}) => api.post<{ driver_id: string; status: string; message: string; invite_email_sent?: boolean }>("/api/admin/drivers/pre-register", data);
+
+// Re-send the sign-up instructions email to a driver who is still pending activation.
+export const resendDriverInvite = (driverId: string) =>
+  api.post<{ message: string; sent: boolean }>(`/api/admin/drivers/${driverId}/resend-invite`);
 
 // ---------------------------------------------------------------------------
 // QA TP-DRV-06/07: admins can submit documents on a driver's behalf. Two-step

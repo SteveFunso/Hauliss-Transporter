@@ -75,7 +75,7 @@ import {
   type DriverDocument,
   type DriverDocumentType,
 } from '@/lib/api/drivers';
-import { preRegisterDriver } from '@/lib/api/drivers';
+import { preRegisterDriver, resendDriverInvite } from '@/lib/api/drivers';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -392,6 +392,18 @@ export function Drivers() {
   const [earningsOpen, setEarningsOpen] = useState(false);
   const [earningsDriver, setEarningsDriver] = useState<AdminDriver | null>(null);
 
+  const handleResendInvite = async (driver: AdminDriver) => {
+    setActionLoading(driver.id);
+    try {
+      await resendDriverInvite(driver.id);
+      toast.success(`Sign-up instructions re-sent to ${driver.email}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not resend the invitation', { duration: 8000 });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleAddDriver = async () => {
     if (!addForm.email || !addForm.full_name || !addForm.phone) {
       toast.error('Email, Full Name and Phone are required');
@@ -401,7 +413,7 @@ export function Drivers() {
     try {
       // Pre-registration (not a password account): the driver completes
       // sign-up in the driver app with this email + the company's Transporter ID.
-      await preRegisterDriver({
+      const created = await preRegisterDriver({
         email: addForm.email.trim(),
         full_name: addForm.full_name.trim(),
         phone_number: addForm.phone.trim(),
@@ -411,8 +423,10 @@ export function Drivers() {
         transporter_id: ownTransporterId || undefined,
       });
       toast.success(
-        `Driver added as pending. Ask ${addForm.full_name.trim()} to sign up in the driver app with ${addForm.email.trim()}` +
-          (ownTransporterId ? ` and Transporter ID ${ownTransporterId}.` : '.'),
+        created?.invite_email_sent
+          ? `Driver added as pending. Sign-up instructions were emailed to ${addForm.email.trim()}.`
+          : `Driver added as pending. Ask ${addForm.full_name.trim()} to sign up in the driver app with ${addForm.email.trim()}` +
+              (ownTransporterId ? ` and Transporter ID ${ownTransporterId}.` : '.'),
         { duration: 9000 }
       );
       setAddForm({ email: '', full_name: '', phone: '', vehicle_type: '', license_number: '' });
@@ -958,7 +972,23 @@ export function Drivers() {
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEarningsDriver(driver); setEarningsOpen(true); }}>
                                 <Wallet className="w-4 h-4 mr-2" /> View Earnings
                               </DropdownMenuItem>
-                              {driver.status !== 'suspended' ? (
+                              {driver.status === 'pending_activation' && (
+                                <DropdownMenuItem
+                                  disabled={actionLoading === driver.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleResendInvite(driver);
+                                  }}
+                                >
+                                  {actionLoading === driver.id ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                  )}
+                                  Resend invitation email
+                                </DropdownMenuItem>
+                              )}
+                              {driver.status === 'active' ? (
                                 <DropdownMenuItem
                                   className="text-red-600"
                                   disabled={actionLoading === driver.id}
