@@ -71,6 +71,20 @@ export const reviewDriverDocument = (documentId: string, status: 'verified' | 'r
 export type DriverStats = { total: number; active: number; pending_activation: number; blocked: number };
 export const getDriverStats = () => api.get<DriverStats>("/api/admin/drivers/stats");
 
+// Company admins add drivers through pre-registration: the driver row is
+// created as "pending activation" and the driver finishes sign-up in the
+// driver app (OTP → password → Transporter ID). transporter_id is optional —
+// the API defaults it to the admin's own company.
+export const preRegisterDriver = (data: {
+  email: string;
+  full_name: string;
+  phone_number: string;
+  vehicle_type?: string;
+  license_number?: string;
+  company_name?: string;
+  transporter_id?: string;
+}) => api.post<{ driver_id: string; status: string; message: string }>("/api/admin/drivers/pre-register", data);
+
 // ---------------------------------------------------------------------------
 // QA TP-DRV-06/07: admins can submit documents on a driver's behalf. Two-step
 // flow: upload the file (multipart) → register it against the driver.

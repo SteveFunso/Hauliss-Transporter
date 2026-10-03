@@ -75,7 +75,8 @@ import {
   type DriverDocument,
   type DriverDocumentType,
 } from '@/lib/api/drivers';
-import { createUser } from '@/lib/api/users';
+import { preRegisterDriver } from '@/lib/api/drivers';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -165,13 +166,19 @@ export function Drivers() {
   const [editDriverOpen, setEditDriverOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<AdminDriver | null>(null);
 
-  // Add driver form
+  // Add driver form. Company and Transporter ID are not typed in: a company
+  // admin can only add drivers to their own company, so both come from the
+  // signed-in profile (typing the company's UUID here used to produce
+  // "Cannot assign a driver to another company").
+  const { user } = useAuth();
+  const ownTransporterId = user?.transporterId || '';
+  const ownCompanyName = user?.companyName || '';
   const [addForm, setAddForm] = useState({
     email: '',
     full_name: '',
     phone: '',
-    company: '',
-    transporter_id: '',
+    vehicle_type: '',
+    license_number: '',
   });
 
   // Edit driver form
@@ -386,27 +393,33 @@ export function Drivers() {
   const [earningsDriver, setEarningsDriver] = useState<AdminDriver | null>(null);
 
   const handleAddDriver = async () => {
-    if (!addForm.email || !addForm.full_name) {
-      toast.error('Email and Full Name are required');
+    if (!addForm.email || !addForm.full_name || !addForm.phone) {
+      toast.error('Email, Full Name and Phone are required');
       return;
     }
     setAddLoading(true);
     try {
-      await createUser({
-        email: addForm.email,
-        full_name: addForm.full_name,
-        phone_number: addForm.phone || undefined,
-        role: 'driver',
-        company_name: addForm.company || undefined,
-        transporter_id: addForm.transporter_id || undefined,
-        password: crypto.randomUUID().slice(0, 12),
+      // Pre-registration (not a password account): the driver completes
+      // sign-up in the driver app with this email + the company's Transporter ID.
+      await preRegisterDriver({
+        email: addForm.email.trim(),
+        full_name: addForm.full_name.trim(),
+        phone_number: addForm.phone.trim(),
+        vehicle_type: addForm.vehicle_type.trim() || undefined,
+        license_number: addForm.license_number.trim() || undefined,
+        company_name: ownCompanyName || undefined,
+        transporter_id: ownTransporterId || undefined,
       });
-      toast.success(`Driver invitation sent to ${addForm.email}`);
-      setAddForm({ email: '', full_name: '', phone: '', company: '', transporter_id: '' });
+      toast.success(
+        `Driver added as pending. Ask ${addForm.full_name.trim()} to sign up in the driver app with ${addForm.email.trim()}` +
+          (ownTransporterId ? ` and Transporter ID ${ownTransporterId}.` : '.'),
+        { duration: 9000 }
+      );
+      setAddForm({ email: '', full_name: '', phone: '', vehicle_type: '', license_number: '' });
       setAddDriverOpen(false);
       refetch(); refetchStats();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create driver');
+      toast.error(err.message || 'Failed to add driver', { duration: 8000 });
     } finally {
       setAddLoading(false);
     }
@@ -597,7 +610,12 @@ export function Drivers() {
       <Dialog open={addDriverOpen} onOpenChange={setAddDriverOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Invite New Driver</DialogTitle>
+            <DialogTitle>Add Driver</DialogTitle>
+            <DialogDescription>
+              The driver is added to {ownCompanyName || 'your company'}
+              {ownTransporterId ? ` (Transporter ID ${ownTransporterId})` : ''} as pending and finishes sign-up in the
+              driver app with this email and your Transporter ID.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -620,7 +638,7 @@ export function Drivers() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="add-phone">Phone</Label>
+              <Label htmlFor="add-phone">Phone *</Label>
               <Input
                 id="add-phone"
                 type="tel"
@@ -629,29 +647,41 @@ export function Drivers() {
                 onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="add-company">Company</Label>
-              <Input
-                id="add-company"
-                placeholder="Transport Co."
-                value={addForm.company}
-                onChange={(e) => setAddForm({ ...addForm, company: e.target.value })}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="add-vehicle">Vehicle type</Label>
+                <Input
+                  id="add-vehicle"
+                  placeholder="Mini Van"
+                  value={addForm.vehicle_type}
+                  onChange={(e) => setAddForm({ ...addForm, vehicle_type: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="add-license">Licence number</Label>
+                <Input
+                  id="add-license"
+                  placeholder="Optional"
+                  value={addForm.license_number}
+                  onChange={(e) => setAddForm({ ...addForm, license_number: e.target.value })}
+                />
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="add-tid">Transporter ID</Label>
-              <Input
-                id="add-tid"
-                placeholder="TRN-XXXX"
-                value={addForm.transporter_id}
-                onChange={(e) => setAddForm({ ...addForm, transporter_id: e.target.value })}
-              />
+            <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Company</span>
+                <span className="font-medium text-right">{ownCompanyName || '—'}</span>
+              </div>
+              <div className="flex justify-between gap-3 mt-1">
+                <span className="text-muted-foreground">Transporter ID</span>
+                <span className="font-mono font-medium">{ownTransporterId || '—'}</span>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDriverOpen(false)} disabled={addLoading}>Cancel</Button>
             <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleAddDriver} disabled={addLoading}>
-              {addLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Send Invitation'}
+              {addLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Adding...</> : 'Add Driver'}
             </Button>
           </DialogFooter>
         </DialogContent>
