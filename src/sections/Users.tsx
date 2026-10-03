@@ -15,7 +15,10 @@ import {
   ChevronRight,
   Eye,
   Pencil,
-  Loader2
+  Loader2,
+  RefreshCw,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,20 +59,50 @@ import {
 } from '@/components/ui/table';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getUsers, getUserStats, updateUser, createUser, type AdminUser } from '@/lib/api/users';
+import { getUsers, getUserStats, getUser, updateUser, createUser, type AdminUser, type CreatedUser } from '@/lib/api/users';
 import { toast } from 'sonner';
 
-// Real, assignable platform roles (filter, labels and dialogs all derive from this).
-const ROLES: { value: string; label: string }[] = [
-  { value: 'client', label: 'Client' },
-  { value: 'driver', label: 'Driver' },
-  { value: 'agent', label: 'Agent' },
-  { value: 'company_owner', label: 'Company Owner' },
-  { value: 'fleet_manager', label: 'Fleet Manager' },
-  { value: 'support', label: 'Support' },
-  { value: 'admin', label: 'Admin' },
-  { value: 'super_admin', label: 'Super Admin' },
-];
+// Display labels for every role the directory can return.
+const ROLE_LABELS: Record<string, string> = {
+  client: 'Client',
+  driver: 'Driver',
+  agent: 'Agent',
+  company_owner: 'Company Owner',
+  fleet_manager: 'Fleet Manager',
+  support: 'Support',
+  admin: 'Admin',
+  super_admin: 'Super Admin',
+};
+
+// Role filter (QA TP-USR-05): the transporter portal never lists Super Admins.
+const FILTER_ROLES = ['admin', 'fleet_manager', 'support', 'company_owner', 'driver', 'client'];
+
+// Roles a company admin may assign here. Drivers are invited from the Drivers page.
+const ASSIGNABLE_ROLES = ['admin', 'fleet_manager', 'support', 'company_owner'];
+
+const SEARCH_KEY = 'hauliss_search';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const roleLabel = (role?: string | null) =>
+  (role && ROLE_LABELS[role]) ||
+  String(role || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) ||
+  '—';
+
+const formatDate = (value?: string | null, options?: Intl.DateTimeFormatOptions) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-NG', options ?? { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const initialsOf = (name?: string | null) =>
+  (name || '').trim().split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+const defaultAddForm = { full_name: '', email: '', phone_number: '', role: 'admin', password: '' };
+
+// Let one Radix dialog finish closing before the next opens; opening the
+// second mid-exit-animation can leave `pointer-events: none` stuck on <body>.
+const DIALOG_HANDOFF_MS = 150;
 
 function TableRowSkeleton() {
   return (
@@ -92,6 +125,18 @@ function TableRowSkeleton() {
   );
 }
 
+function ProfileField({ label, value, mono }: { label: string; value?: React.ReactNode; mono?: boolean }) {
+  const empty = value === null || value === undefined || value === '';
+  return (
+    <div className="p-3 rounded-lg bg-muted/50 min-w-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className={`text-sm font-medium mt-0.5 break-words ${mono ? 'font-mono' : ''} ${empty ? 'text-muted-foreground font-normal' : ''}`}>
+        {empty ? '—' : value}
+      </div>
+    </div>
+  );
+}
+
 export function Users() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -101,16 +146,32 @@ export function Users() {
   // Dialog states
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [addUserLoading, setAddUserLoading] = useState(false);
-  const [addUserForm, setAddUserForm] = useState({ full_name: '', email: '', phone_number: '', role: 'client', password: '' });
+  const [addUserForm, setAddUserForm] = useState(defaultAddForm);
+  const [createdUser, setCreatedUser] = useState<CreatedUser | null>(null);
 
-  const [viewProfileUser, setViewProfileUser] = useState<AdminUser | null>(null);
+  // View Profile: fetched from GET /api/admin/users/:id (QA TP-USR-05)
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+  const [viewProfile, setViewProfile] = useState<AdminUser | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewError, setViewError] = useState<string | null>(null);
+  const [viewAttempt, setViewAttempt] = useState(0);
 
   const [editUserOpen, setEditUserOpen] = useState(false);
   const [editUserLoading, setEditUserLoading] = useState(false);
   const [editUserForm, setEditUserForm] = useState({ full_name: '', email: '', phone_number: '', role: '' });
   const [editUserId, setEditUserId] = useState<string | null>(null);
 
+  const [copied, setCopied] = useState<string | null>(null);
+
   const pagination = usePagination(20);
+
+  // Deep link from other sections (e.g. the header search).
+  useEffect(() => {
+    const saved = sessionStorage.getItem(SEARCH_KEY);
+    if (saved === null) return;
+    sessionStorage.removeItem(SEARCH_KEY);
+    if (saved.trim()) setSearchQuery(saved);
+  }, []);
 
   // Debounce search input
   useEffect(() => {
@@ -151,6 +212,35 @@ export function Users() {
 
   const userList: AdminUser[] = (data as any)?.data || [];
 
+  // Load the full record whenever a profile is opened (or Retry is pressed).
+  useEffect(() => {
+    if (!viewProfileId) {
+      setViewProfile(null);
+      setViewError(null);
+      setViewLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setViewLoading(true);
+    setViewError(null);
+    getUser(viewProfileId)
+      .then((u) => { if (!cancelled) setViewProfile(u); })
+      .catch((err: any) => { if (!cancelled) setViewError(err?.message || 'Failed to load profile'); })
+      .finally(() => { if (!cancelled) setViewLoading(false); });
+    return () => { cancelled = true; };
+  }, [viewProfileId, viewAttempt]);
+
+  const copyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      toast.success(`${label} copied`);
+      setTimeout(() => setCopied((c) => (c === label ? null : c)), 2000);
+    } catch {
+      toast.error('Could not copy to clipboard');
+    }
+  };
+
   const handleStatusChange = async (userId: string, newStatus: string) => {
     try {
       await updateUser(userId, { status: newStatus });
@@ -162,23 +252,40 @@ export function Users() {
   };
 
   const handleAddUser = async () => {
-    if (!addUserForm.full_name || !addUserForm.email || !addUserForm.password) {
-      toast.error('Please fill in all required fields');
+    const full_name = addUserForm.full_name.trim();
+    const email = addUserForm.email.trim().toLowerCase();
+    if (!full_name || !email) {
+      toast.error('Full name and email are required');
+      return;
+    }
+    if (!EMAIL_RE.test(email)) {
+      toast.error('Enter a valid email address');
+      return;
+    }
+    if (addUserForm.password && addUserForm.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
       return;
     }
     setAddUserLoading(true);
     try {
-      await createUser({
-        email: addUserForm.email,
-        password: addUserForm.password,
-        full_name: addUserForm.full_name,
-        phone_number: addUserForm.phone_number || undefined,
-        role: addUserForm.role || 'client',
+      const created = await createUser({
+        email,
+        full_name,
+        phone_number: addUserForm.phone_number.trim() || undefined,
+        role: addUserForm.role || 'admin',
+        // Blank → the server generates a temporary password and emails it.
+        password: addUserForm.password || undefined,
       });
-      toast.success(`User "${addUserForm.full_name}" created successfully`);
+      toast.success(`User "${full_name}" created successfully`);
       setAddUserOpen(false);
-      setAddUserForm({ full_name: '', email: '', phone_number: '', role: 'client', password: '' });
+      const role = addUserForm.role;
+      setAddUserForm(defaultAddForm);
       refetch();
+      if (created?.temporary_password) {
+        setTimeout(() => {
+          setCreatedUser({ ...created, email: created.email || email, role: created.role || role });
+        }, DIALOG_HANDOFF_MS);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to create user');
     } finally {
@@ -195,6 +302,14 @@ export function Users() {
       role: user.role || '',
     });
     setEditUserOpen(true);
+  };
+
+  // View → Edit: close the profile dialog first, then open the editor.
+  const handleEditFromProfile = () => {
+    const target = viewProfile ?? userList.find((u) => u.id === viewProfileId) ?? null;
+    setViewProfileId(null);
+    if (!target) return;
+    setTimeout(() => handleOpenEdit(target), DIALOG_HANDOFF_MS);
   };
 
   const handleEditUser = async () => {
@@ -241,9 +356,12 @@ export function Users() {
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    return ROLES.find((r) => r.value === role)?.label ?? role;
-  };
+  // Keep a non-assignable current role (e.g. driver) selectable so the editor
+  // never silently changes it.
+  const editRoleOptions =
+    editUserForm.role && !ASSIGNABLE_ROLES.includes(editUserForm.role)
+      ? [editUserForm.role, ...ASSIGNABLE_ROLES]
+      : ASSIGNABLE_ROLES;
 
   return (
     <div className="p-6 space-y-6">
@@ -296,8 +414,8 @@ export function Users() {
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20"
               >
                 <option value="all">All Roles</option>
-                {ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                {FILTER_ROLES.map((r) => (
+                  <option key={r} value={r}>{roleLabel(r)}</option>
                 ))}
               </select>
               <Button
@@ -363,7 +481,7 @@ export function Users() {
                             <Avatar>
                               <AvatarImage src={realPhotoUrl(user.profile_photo_url)} alt={user.full_name} />
                               <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white">
-                                {user.full_name?.split(' ').map(n => n[0]).join('') || '?'}
+                                {initialsOf(user.full_name)}
                               </AvatarFallback>
                             </Avatar>
                             <div>
@@ -382,28 +500,25 @@ export function Users() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="font-normal">
-                            {getRoleLabel(user.role)}
+                            {roleLabel(user.role)}
                           </Badge>
                         </TableCell>
                         <TableCell>{getStatusBadge(user.status)}</TableCell>
                         <TableCell>
                           <span className="text-sm text-muted-foreground">
-                            {new Date(user.created_at).toLocaleDateString('en-NG', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
+                            {formatDate(user.created_at)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <DropdownMenu>
+                          {/* modal={false}: a modal menu opening a modal dialog can leave body pointer-events stuck */}
+                          <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon">
                                 <MoreVertical className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setViewProfileUser(user)}>
+                              <DropdownMenuItem onClick={() => setViewProfileId(user.id)}>
                                 <Eye className="w-4 h-4 mr-2" /> View Profile
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleOpenEdit(user)}>
@@ -547,7 +662,7 @@ export function Users() {
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>
-              Create a new platform user.
+              Create a team account for your company. Drivers are invited from the Drivers page.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -589,21 +704,25 @@ export function Users() {
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  {ASSIGNABLE_ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-password">Password *</Label>
+              <Label htmlFor="add-password">Password (optional)</Label>
               <Input
                 id="add-password"
                 type="password"
-                placeholder="Enter password"
+                autoComplete="new-password"
+                placeholder="Leave blank to generate one"
                 value={addUserForm.password}
                 onChange={(e) => setAddUserForm(f => ({ ...f, password: e.target.value }))}
               />
+              <p className="text-xs text-muted-foreground">
+                Leave blank and a temporary password is generated and emailed with a welcome message.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -622,69 +741,155 @@ export function Users() {
         </DialogContent>
       </Dialog>
 
-      {/* View Profile Dialog */}
-      <Dialog open={!!viewProfileUser} onOpenChange={(open) => !open && setViewProfileUser(null)}>
+      {/* One-time credentials (only when the server generated the password) */}
+      <Dialog open={!!createdUser} onOpenChange={(open) => { if (!open) setCreatedUser(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>User Profile</DialogTitle>
+            <DialogTitle>User created</DialogTitle>
+            <DialogDescription>
+              A welcome email has been sent to {createdUser?.email}. The temporary password below is shown only once.
+            </DialogDescription>
           </DialogHeader>
-          {viewProfileUser && (
-            <div className="space-y-4 py-2">
-              <div className="flex items-center gap-4">
-                <Avatar className="w-16 h-16">
-                  <AvatarImage src={realPhotoUrl(viewProfileUser.profile_photo_url)} alt={viewProfileUser.full_name} />
-                  <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white text-lg">
-                    {viewProfileUser.full_name?.split(' ').map(n => n[0]).join('') || '?'}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-lg font-semibold">{viewProfileUser.full_name}</p>
-                  <Badge variant="outline" className="font-normal mt-1">
-                    {getRoleLabel(viewProfileUser.role)}
-                  </Badge>
-                </div>
+          {createdUser && (
+            <div className="space-y-3 py-2">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">Email</p>
+                <p className="text-sm font-medium break-all">{createdUser.email}</p>
               </div>
-              <div className="space-y-3 border-t pt-4">
-                <div className="flex items-center gap-3 text-sm">
-                  <Mail className="w-4 h-4 text-muted-foreground" />
-                  <span>{viewProfileUser.email}</span>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">Role</p>
+                <p className="text-sm font-medium">{roleLabel(createdUser.role)}</p>
+              </div>
+              <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/50">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Temporary password</p>
+                  <p className="text-sm font-mono font-medium break-all">{createdUser.temporary_password}</p>
                 </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Phone className="w-4 h-4 text-muted-foreground" />
-                  <span>{viewProfileUser.phone_number || 'N/A'}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <span>Joined {new Date(viewProfileUser.created_at).toLocaleDateString('en-NG', {
-                    day: 'numeric', month: 'long', year: 'numeric'
-                  })}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  {viewProfileUser.status === 'active' ? (
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <XCircle className="w-4 h-4 text-red-600" />
-                  )}
-                  <span className="capitalize">{viewProfileUser.status}</span>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  title="Copy temporary password"
+                  onClick={() => copyToClipboard(createdUser.temporary_password || '', 'Temporary password')}
+                >
+                  {copied === 'Temporary password' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                </Button>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setViewProfileUser(null)}>
+            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={() => setCreatedUser(null)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Profile Dialog */}
+      <Dialog open={!!viewProfileId} onOpenChange={(open) => { if (!open) setViewProfileId(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>User Profile</DialogTitle>
+            <DialogDescription>Full account record from the user directory.</DialogDescription>
+          </DialogHeader>
+
+          {viewLoading ? (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-4">
+                <Skeleton className="w-16 h-16 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                ))}
+              </div>
+            </div>
+          ) : viewError ? (
+            <div className="py-6 flex flex-col items-center text-center gap-3">
+              <AlertCircle className="w-8 h-8 text-red-500" />
+              <p className="text-sm font-medium">Failed to load profile</p>
+              <p className="text-sm text-muted-foreground">{viewError}</p>
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setViewAttempt((a) => a + 1)}>
+                <RefreshCw className="w-4 h-4" /> Retry
+              </Button>
+            </div>
+          ) : viewProfile ? (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-4">
+                <Avatar className="w-16 h-16">
+                  <AvatarImage src={realPhotoUrl(viewProfile.profile_photo_url)} alt={viewProfile.full_name} />
+                  <AvatarFallback className="bg-gradient-to-br from-[#F97316] to-[#111111] text-white text-lg">
+                    {initialsOf(viewProfile.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-lg font-semibold truncate">{viewProfile.full_name || '—'}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <Badge variant="outline" className="font-normal">{roleLabel(viewProfile.role)}</Badge>
+                    {getStatusBadge(viewProfile.status)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t pt-4">
+                <ProfileField
+                  label="Email"
+                  value={
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      <span className="break-all">{viewProfile.email}</span>
+                      {viewProfile.email_verified ? (
+                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 font-normal">Verified</Badge>
+                      ) : (
+                        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 font-normal">Unverified</Badge>
+                      )}
+                    </span>
+                  }
+                />
+                <ProfileField label="Phone" value={viewProfile.phone_number} />
+                <ProfileField label="Account type" value={viewProfile.account_type ? roleLabel(viewProfile.account_type) : ''} />
+                <ProfileField label="Company" value={viewProfile.company_name} />
+                <ProfileField label="Transporter ID" value={viewProfile.transporter_id} mono />
+                <ProfileField label="Vehicle type" value={viewProfile.vehicle_type} />
+                <ProfileField label="Joined" value={formatDate(viewProfile.created_at, { day: 'numeric', month: 'long', year: 'numeric' })} />
+                <ProfileField label="Last updated" value={formatDate(viewProfile.updated_at, { day: 'numeric', month: 'long', year: 'numeric' })} />
+                <div className="sm:col-span-2">
+                  <ProfileField
+                    label="User ID"
+                    mono
+                    value={
+                      <span className="inline-flex items-center gap-2 max-w-full">
+                        <span className="break-all">{viewProfile.id}</span>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground shrink-0"
+                          title="Copy user ID"
+                          onClick={() => copyToClipboard(viewProfile.id, 'User ID')}
+                        >
+                          {copied === 'User ID' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </span>
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewProfileId(null)}>
               Close
             </Button>
-            {viewProfileUser && (
-              <Button
-                className="bg-[#F97316] hover:bg-[#F97316]/90 text-white"
-                onClick={() => {
-                  handleOpenEdit(viewProfileUser);
-                  setViewProfileUser(null);
-                }}
-              >
-                <Pencil className="w-4 h-4 mr-2" /> Edit User
-              </Button>
-            )}
+            <Button
+              className="bg-[#F97316] hover:bg-[#F97316]/90 text-white"
+              onClick={handleEditFromProfile}
+              disabled={viewLoading || (!viewProfile && !userList.some((u) => u.id === viewProfileId))}
+            >
+              <Pencil className="w-4 h-4 mr-2" /> Edit User
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -736,8 +941,8 @@ export function Users() {
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  {editRoleOptions.map((r) => (
+                    <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

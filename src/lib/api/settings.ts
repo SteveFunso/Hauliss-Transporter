@@ -1,5 +1,10 @@
 import { api } from "./client";
 
+// NOTE (QA TP-SET-01 / TP-PRC-06): these are PLATFORM-wide settings owned by
+// Hauliss. The transporter portal no longer reads or writes them — company
+// self-service lives in ./company.ts and the read-only rate card in
+// ./pricing.ts. Kept so existing imports (lib/api/index.ts) keep compiling.
+
 // The server returns most scalar settings wrapped in a {value, description, ...}
 // envelope. Reads must unwrap `.value`; writes stay flat (the server accepts
 // flat strings/numbers on PUT).

@@ -1,4 +1,5 @@
 import { api, type ApiResponse } from "./client";
+import { getMe } from "./auth";
 
 export type AdminDriver = {
   id: string;
@@ -69,3 +70,74 @@ export const reviewDriverDocument = (documentId: string, status: 'verified' | 'r
 // ("active users") in the driver cards. This is the driver-scoped summary.
 export type DriverStats = { total: number; active: number; pending_activation: number; blocked: number };
 export const getDriverStats = () => api.get<DriverStats>("/api/admin/drivers/stats");
+
+// ---------------------------------------------------------------------------
+// QA TP-DRV-06/07: admins can submit documents on a driver's behalf. Two-step
+// flow: upload the file (multipart) → register it against the driver.
+// ---------------------------------------------------------------------------
+export const DRIVER_DOCUMENT_TYPES = [
+  { value: "drivers_license", label: "Driver's License" },
+  { value: "vehicle_registration", label: "Vehicle Registration" },
+  { value: "insurance", label: "Vehicle Insurance" },
+  { value: "roadworthiness", label: "Roadworthiness Certificate" },
+  { value: "national_id", label: "National ID" },
+  { value: "proof_of_address", label: "Proof of Address" },
+  { value: "hackney_permit", label: "Hackney Permit" },
+  { value: "other", label: "Other document" },
+] as const;
+export type DriverDocumentType = (typeof DRIVER_DOCUMENT_TYPES)[number]["value"];
+
+/** File types the documents service accepts (JPEG, PNG, WebP, HEIC, GIF, PDF). */
+export const DRIVER_DOCUMENT_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/gif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.gif,.pdf";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "";
+
+/**
+ * Step 1: POST /api/upload/document (multipart/form-data, field `file`,
+ * optional `file_type`) → { file_url, url, file_type }.
+ *
+ * The shared JSON client cannot send multipart bodies, so this uses fetch
+ * directly. On a 401 it asks the shared client (via getMe) to refresh the
+ * access token — or force the normal logout — and retries once.
+ */
+export async function uploadDriverDocumentFile(
+  file: File,
+  fileType?: string
+): Promise<{ file_url: string; file_type?: string }> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  if (fileType) form.append("file_type", fileType);
+  const qs = fileType ? `?file_type=${encodeURIComponent(fileType)}` : "";
+
+  const send = () => {
+    const token = localStorage.getItem("hauliss_access_token");
+    return fetch(`${API_BASE_URL}/api/upload/document${qs}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+  };
+
+  let res = await send();
+  if (res.status === 401) {
+    await getMe();
+    res = await send();
+  }
+
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.message || `Upload failed: ${res.status}`);
+
+  const url = json?.file_url || json?.url || json?.data?.file_url || json?.data?.url;
+  if (!url) throw new Error("Upload succeeded but no file URL was returned");
+  return { file_url: String(url), file_type: json?.file_type ?? json?.data?.file_type };
+}
+
+/** Step 2: POST /api/driver/documents — registers the uploaded file for review. */
+export const submitDriverDocument = (data: {
+  driver_id: string;
+  type: DriverDocumentType | string;
+  image_url: string;
+  /** YYYY-MM-DD */
+  expiry_date?: string;
+  document_number?: string;
+}) => api.post<DriverDocument & { message?: string }>("/api/driver/documents", data);

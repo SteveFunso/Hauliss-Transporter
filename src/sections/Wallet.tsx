@@ -45,9 +45,24 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getPayments, getPaymentStats, processRefund, type AdminPayment } from '@/lib/api/payments';
+import { getPayments, getPaymentStats, processRefund, paymentMinorToMajor, type AdminPayment } from '@/lib/api/payments';
 import type { ApiResponse } from '@/lib/api/client';
 import { toast } from 'sonner';
+
+// This page reads only GET /api/admin/payments and GET /api/admin/payments/stats
+// (both scoped server-side to the caller's company). Every amount those return
+// is in minor units (kobo); it is converted to naira exactly once, here.
+const formatCurrency = (amount: number) => {
+  const value = Number.isFinite(amount) ? amount : 0;
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    minimumFractionDigits: 0
+  }).format(value);
+};
+
+const formatMinor = (minor: number | string | null | undefined) =>
+  formatCurrency(paymentMinorToMajor(minor));
 
 export function Wallet() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,9 +115,9 @@ export function Wallet() {
   };
 
   const exportCSV = () => {
-    const headers = "ID,Booking,Provider,Amount,Status,Date\n";
+    const headers = "ID,Booking,Provider,Amount (NGN),Status,Date\n";
     const rows = payments.map(p =>
-      `${p.id},${p.booking_id || ''},${p.provider},${toMajor(p.amount_minor_units)},${p.status},${p.created_at}`
+      `${p.id},${p.booking_id || ''},${p.provider},${paymentMinorToMajor(p.amount_minor_units).toFixed(2)},${p.status},${p.created_at}`
     ).join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -120,7 +135,7 @@ export function Wallet() {
       `Payment ID: ${payment.id}`,
       `Booking ID: ${payment.booking_id || 'N/A'}`,
       `Provider: ${payment.provider?.replace('_', ' ') ?? 'Unknown'}`,
-      `Amount: ${formatCurrency(toMajor(payment.amount_minor_units))}`,
+      `Amount: ${formatMinor(payment.amount_minor_units)}`,
       `Currency: ${payment.currency}`,
       `Status: ${payment.status}`,
       `Date: ${new Date(payment.created_at).toLocaleString()}`,
@@ -186,23 +201,8 @@ export function Wallet() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    const value = Number.isFinite(amount) ? amount : 0;
-    return new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency: 'NGN',
-      minimumFractionDigits: 0
-    }).format(value);
-  };
-
-  // amount_minor_units may arrive as a string; coerce defensively so math/formatting never sees NaN
-  const toMajor = (minor: number | string) => {
-    const n = Number(minor);
-    return (Number.isFinite(n) ? n : 0) / 100;
-  };
-
-  const totalRevenueRaw = Number(stats?.total_amount ?? 0) / 100;
-  const totalRevenue = Number.isFinite(totalRevenueRaw) ? totalRevenueRaw : 0;
+  // stats.total_amount is the sum of amount_minor_units for paid payments.
+  const totalRevenue = paymentMinorToMajor(stats?.total_amount);
   const pendingCount = stats?.pending ?? 0;
 
   return (
@@ -268,7 +268,7 @@ export function Wallet() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Amount</span>
-                  <span className="text-sm font-semibold">{formatCurrency(toMajor(selectedPayment.amount_minor_units))}</span>
+                  <span className="text-sm font-semibold">{formatMinor(selectedPayment.amount_minor_units)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Currency</span>
@@ -312,7 +312,7 @@ export function Wallet() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Amount</span>
-                  <span className="text-sm font-semibold text-red-600">{formatCurrency(toMajor(refundTarget.amount_minor_units))}</span>
+                  <span className="text-sm font-semibold text-red-600">{formatMinor(refundTarget.amount_minor_units)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Provider</span>
@@ -507,7 +507,7 @@ export function Wallet() {
                             ? 'text-red-600'
                             : 'text-foreground'
                         )}>
-                          {formatCurrency(toMajor(payment.amount_minor_units))}
+                          {formatMinor(payment.amount_minor_units)}
                         </span>
                       </TableCell>
                       <TableCell>{getStatusBadge(payment.status)}</TableCell>
@@ -517,7 +517,7 @@ export function Wallet() {
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
+                        <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon">
                               <MoreVertical className="w-4 h-4" />

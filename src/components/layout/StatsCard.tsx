@@ -32,6 +32,11 @@ export function StatsCard({
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return;
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -46,7 +51,14 @@ export function StatsCard({
       observer.observe(cardRef.current);
     }
 
-    return () => observer.disconnect();
+    // Safety net: if the observer never reports the card as visible (background tab,
+    // print preview, embedded webview), still show the real value instead of 0.
+    const fallback = window.setTimeout(() => setIsVisible(true), 1500);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(fallback);
+    };
   }, []);
 
   useEffect(() => {
@@ -74,7 +86,14 @@ export function StatsCard({
       requestAnimationFrame(animate);
     }, delay);
 
-    return () => clearTimeout(timeout);
+    // Animation frames are paused in background tabs; make sure the final value
+    // is always rendered once the animation window has elapsed.
+    const settle = window.setTimeout(() => setDisplayValue(value), delay + 1700);
+
+    return () => {
+      clearTimeout(timeout);
+      window.clearTimeout(settle);
+    };
   }, [isVisible, value, delay]);
 
   const formatValue = (val: number) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Users,
   Truck,
@@ -39,6 +39,7 @@ import {
   getBookingStatusChart,
   getFleetChart,
   getDriverPerformanceChart,
+  minorToMajor,
   type DashboardStats,
   type ChartDataPoint
 } from '@/lib/api/dashboard';
@@ -46,6 +47,36 @@ import { toast } from 'sonner';
 
 function navigateToSection(section: string) {
   window.dispatchEvent(new CustomEvent('navigate:section', { detail: section }));
+}
+
+/** Compact naira for chart axes: ₦2.5M / ₦120k / ₦950. */
+function formatCompactNaira(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `₦${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  if (abs >= 1_000) return `₦${(value / 1_000).toFixed(0)}k`;
+  return `₦${Math.round(value)}`;
+}
+
+/** Makes a KPI card navigate to its section (QA TP-NAV-07) with keyboard support. */
+function StatLink({ section, label, children }: { section: string; label: string; children: React.ReactNode }) {
+  const go = () => navigateToSection(section);
+  return (
+    <div
+      role="link"
+      tabIndex={0}
+      aria-label={label}
+      onClick={go}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          go();
+        }
+      }}
+      className="cursor-pointer rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2"
+    >
+      {children}
+    </div>
+  );
 }
 
 function StatsCardSkeleton() {
@@ -80,7 +111,12 @@ export function Dashboard() {
   const { data: fleetResponse, isLoading: fleetLoading, refetch: refetchFleet } = useApi(() => getFleetChart(), []);
   const { data: driverResponse, isLoading: driverLoading, refetch: refetchDrivers } = useApi(() => getDriverPerformanceChart(), []);
 
-  const revenueChartData = revenueResponse?.data || [];
+  // Revenue buckets arrive in kobo — convert once for the axis, line and tooltip.
+  const revenueChartData = useMemo(
+    () => (revenueResponse?.data || []).map((point) => ({ ...point, revenue: minorToMajor(point.revenue) })),
+    [revenueResponse]
+  );
+  const totalRevenueNaira = minorToMajor(stats?.total_revenue);
   const bookingStatusData = bookingResponse?.data || [];
   const fleetDistribution = fleetResponse?.data || [];
   const driverRatings = driverResponse?.data || [];
@@ -102,7 +138,8 @@ export function Dashboard() {
   const handleExport = () => {
     const rows: ChartDataPoint[] = Object.entries(stats ?? {}).map(([key, value]) => ({
       name: key,
-      value: typeof value === 'number' ? value : 0
+      // Money leaves the API in kobo; export what the user sees (naira).
+      value: key === 'total_revenue' ? totalRevenueNaira : typeof value === 'number' ? value : 0
     }));
     if (rows.length === 0) {
       toast.error('No data to export');
@@ -127,7 +164,7 @@ export function Dashboard() {
       isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
     )}>
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {statsLoading ? (
           <>
             <StatsCardSkeleton />
@@ -144,39 +181,47 @@ export function Dashboard() {
           </Card>
         ) : (
           <>
-            <StatsCard
-              title="Total Users"
-              value={stats?.total_users ?? 0}
-              change={stats?.users_change ?? 0}
-              changeType={(stats?.users_change ?? 0) >= 0 ? 'positive' : 'negative'}
-              icon={<Users className="w-6 h-6" />}
-              delay={0}
-            />
-            <StatsCard
-              title="Active Drivers"
-              value={stats?.active_drivers ?? 0}
-              change={stats?.drivers_change ?? 0}
-              changeType={(stats?.drivers_change ?? 0) >= 0 ? 'positive' : 'negative'}
-              icon={<Truck className="w-6 h-6" />}
-              delay={100}
-            />
-            <StatsCard
-              title="Active Bookings"
-              value={stats?.active_bookings ?? 0}
-              change={stats?.bookings_change ?? 0}
-              changeType={(stats?.bookings_change ?? 0) >= 0 ? 'positive' : 'negative'}
-              icon={<ClipboardList className="w-6 h-6" />}
-              delay={200}
-            />
-            <StatsCard
-              title="Total Revenue"
-              value={stats?.total_revenue ?? 0}
-              change={stats?.revenue_change ?? 0}
-              changeType={(stats?.revenue_change ?? 0) >= 0 ? 'positive' : 'negative'}
-              icon={<Wallet className="w-6 h-6" />}
-              formatAsCurrency
-              delay={300}
-            />
+            <StatLink section="users" label="Open Users">
+              <StatsCard
+                title="Total Users"
+                value={stats?.total_users ?? 0}
+                change={stats?.users_change ?? 0}
+                changeType={(stats?.users_change ?? 0) >= 0 ? 'positive' : 'negative'}
+                icon={<Users className="w-6 h-6" />}
+                delay={0}
+              />
+            </StatLink>
+            <StatLink section="drivers" label="Open Drivers">
+              <StatsCard
+                title="Active Drivers"
+                value={stats?.active_drivers ?? 0}
+                change={stats?.drivers_change ?? 0}
+                changeType={(stats?.drivers_change ?? 0) >= 0 ? 'positive' : 'negative'}
+                icon={<Truck className="w-6 h-6" />}
+                delay={100}
+              />
+            </StatLink>
+            <StatLink section="bookings" label="Open Bookings">
+              <StatsCard
+                title="Active Bookings"
+                value={stats?.active_bookings ?? 0}
+                change={stats?.bookings_change ?? 0}
+                changeType={(stats?.bookings_change ?? 0) >= 0 ? 'positive' : 'negative'}
+                icon={<ClipboardList className="w-6 h-6" />}
+                delay={200}
+              />
+            </StatLink>
+            <StatLink section="payments" label="Open Payments">
+              <StatsCard
+                title="Total Revenue"
+                value={totalRevenueNaira}
+                change={stats?.revenue_change ?? 0}
+                changeType={(stats?.revenue_change ?? 0) >= 0 ? 'positive' : 'negative'}
+                icon={<Wallet className="w-6 h-6" />}
+                formatAsCurrency
+                delay={300}
+              />
+            </StatLink>
           </>
         )}
       </div>
@@ -226,7 +271,7 @@ export function Dashboard() {
                       fontSize={12}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(value) => `₦${(value / 1000000).toFixed(0)}M`}
+                      tickFormatter={(value) => formatCompactNaira(Number(value))}
                     />
                     <Tooltip
                       contentStyle={{
@@ -236,7 +281,7 @@ export function Dashboard() {
                         boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
                       }}
                       formatter={(value: any, name: string) => [
-                        name === 'revenue' ? `₦${value.toLocaleString()}` : value,
+                        name === 'revenue' ? `₦${Number(value).toLocaleString()}` : value,
                         name === 'revenue' ? 'Revenue' : 'Trips'
                       ]}
                     />

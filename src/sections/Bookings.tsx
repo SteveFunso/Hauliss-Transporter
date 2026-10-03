@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search,
   MoreVertical,
@@ -18,7 +18,9 @@ import {
   Edit,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Star,
+  RefreshCw
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,10 +44,21 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MapView } from '@/components/ui/map-view';
-import { useAddressAutocomplete } from '@/hooks/useAddressAutocomplete';
+import { AddressInput } from '@/components/AddressInput';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
-import { getBookings, getBookingStats, updateBookingStatus, updateBooking, createBooking, type AdminBooking } from '@/lib/api/bookings';
+import {
+  getBookings,
+  getBookingStats,
+  updateBookingStatus,
+  updateBooking,
+  createBooking,
+  getAssignableDrivers,
+  type AdminBooking,
+  type AssignableDriver,
+} from '@/lib/api/bookings';
 import { getDrivers, type AdminDriver } from '@/lib/api/drivers';
 import { getTruckTypes, type TruckType } from '@/lib/api/fleet';
 import type { ApiResponse } from '@/lib/api/client';
@@ -62,6 +75,11 @@ type NewBookingForm = {
   truckType: string;
   contactName: string;
   contactPhone: string;
+  // Coordinates are only known when the address was picked from a suggestion.
+  pickupLat: number | null;
+  pickupLng: number | null;
+  dropoffLat: number | null;
+  dropoffLng: number | null;
 };
 
 const emptyForm: NewBookingForm = {
@@ -72,7 +90,105 @@ const emptyForm: NewBookingForm = {
   truckType: '',
   contactName: '',
   contactPhone: '',
+  pickupLat: null,
+  pickupLng: null,
+  dropoffLat: null,
+  dropoffLng: null,
 };
+
+function navigateToSection(section: string) {
+  window.dispatchEvent(new CustomEvent('navigate:section', { detail: section }));
+}
+
+/**
+ * Why a driver cannot be assigned, or null when the account is active.
+ * Auth statuses: active | pending | inactive | suspended | banned.
+ */
+function driverStatusReason(status?: string | null): string | null {
+  const s = (status ?? '').toString().trim().toLowerCase();
+  if (s === 'active') return null;
+  if (s === 'suspended' || s === 'banned' || s === 'blocked') return 'Suspended';
+  if (s === 'inactive') return 'Inactive';
+  if (s === '') return 'Status unknown';
+  return 'Pending verification';
+}
+
+function DriverOption({
+  selected,
+  disabled,
+  reason,
+  onSelect,
+  title,
+  subtitle,
+  rating,
+  isOnline,
+  isAvailable,
+  onJob,
+}: {
+  selected: boolean;
+  disabled?: boolean;
+  reason?: string | null;
+  onSelect: () => void;
+  title: string;
+  subtitle?: string;
+  rating?: number;
+  isOnline?: boolean;
+  isAvailable?: boolean;
+  onJob?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-disabled={disabled || undefined}
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        'w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+        selected ? 'bg-[#F97316]/10' : 'hover:bg-muted/50',
+        disabled && 'opacity-60 cursor-not-allowed hover:bg-transparent'
+      )}
+    >
+      <span
+        className={cn(
+          'w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center',
+          selected ? 'border-[#F97316]' : 'border-muted-foreground/40'
+        )}
+        aria-hidden="true"
+      >
+        {selected && <span className="w-2 h-2 rounded-full bg-[#F97316]" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium truncate">{title}</span>
+          {!disabled && isOnline !== undefined && (
+            isOnline ? (
+              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[10px] px-1.5 py-0">Online</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Offline</Badge>
+            )
+          )}
+          {!disabled && isOnline && (
+            isAvailable ? (
+              <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 text-[10px] px-1.5 py-0">Available</Badge>
+            ) : onJob ? (
+              <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 text-[10px] px-1.5 py-0">On a job</Badge>
+            ) : null
+          )}
+          {reason && <span className="text-xs text-muted-foreground">{reason}</span>}
+        </span>
+        {subtitle && <span className="block text-xs text-muted-foreground truncate">{subtitle}</span>}
+      </span>
+      {typeof rating === 'number' && rating > 0 && (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+          {rating.toFixed(1)}
+        </span>
+      )}
+    </button>
+  );
+}
 
 export function Bookings() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,18 +201,36 @@ export function Bookings() {
   const [creating, setCreating] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const pickupInputRef = useRef<HTMLInputElement>(null);
-  const dropoffInputRef = useRef<HTMLInputElement>(null);
-
-  useAddressAutocomplete(pickupInputRef, (place) => {
-    setNewBookingForm((prev) => ({ ...prev, pickupAddress: place.address }));
-  });
-
-  useAddressAutocomplete(dropoffInputRef, (place) => {
-    setNewBookingForm((prev) => ({ ...prev, dropoffAddress: place.address }));
-  });
-
+  const { user } = useAuth();
   const pagination = usePagination(15);
+
+  // Assign-driver picker (QA TP-BKG-04): the company's own roster; only active
+  // accounts are selectable.
+  const [assignable, setAssignable] = useState<AssignableDriver[]>([]);
+  const [assignableLoading, setAssignableLoading] = useState(false);
+  const [assignableError, setAssignableError] = useState<string | null>(null);
+  const [assignableMessage, setAssignableMessage] = useState<string | null>(null);
+  const assignableSeq = useRef(0);
+  const companyId = user?.companyId ?? null;
+
+  const loadAssignable = useCallback(async (booking: AdminBooking) => {
+    const seq = ++assignableSeq.current;
+    setAssignableLoading(true);
+    setAssignableError(null);
+    setAssignableMessage(null);
+    try {
+      const result = await getAssignableDrivers(booking.id, companyId);
+      if (seq !== assignableSeq.current) return;
+      setAssignable(result.drivers);
+      setAssignableMessage(result.message ?? null);
+    } catch (err: any) {
+      if (seq !== assignableSeq.current) return;
+      setAssignable([]);
+      setAssignableError(err?.message || 'Could not load your drivers');
+    } finally {
+      if (seq === assignableSeq.current) setAssignableLoading(false);
+    }
+  }, [companyId]);
 
 
   // QA 2026-09: "Edit Booking", "Chat with Driver" and "Call Customer" were toast-only.
@@ -123,6 +257,8 @@ export function Bookings() {
 
     setEditBooking(b);
 
+    void loadAssignable(b);
+
   };
 
   const handleSaveEdit = async () => {
@@ -136,6 +272,12 @@ export function Bookings() {
     if ((editForm.truck_type_id || '') !== (editBooking.truck_type_id || '')) patch.truck_type_id = editForm.truck_type_id || null;
 
     if ((editForm.driver_id || '') !== (editBooking.driver_id || '')) patch.driver_id = editForm.driver_id || null;
+
+    if (patch.driver_id) {
+      const picked = assignable.find((d) => d.id === patch.driver_id);
+      const reason = picked ? driverStatusReason(picked.account_status) : null;
+      if (reason) { toast.error(`This driver cannot be assigned (${reason.toLowerCase()})`); return; }
+    }
 
     if (Object.keys(patch).length === 0) { toast.info('No changes to save'); return; }
 
@@ -174,6 +316,15 @@ export function Bookings() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Header search hand-off ("Search bookings for …"): consume the query once.
+  useEffect(() => {
+    const pending = sessionStorage.getItem('hauliss_search');
+    if (pending) {
+      sessionStorage.removeItem('hauliss_search');
+      setSearchQuery(pending);
+    }
+  }, []);
 
   const { data: bookingsData, isLoading, error, refetch } = useApi<ApiResponse<AdminBooking[]>>(
     () => getBookings({
@@ -233,6 +384,10 @@ export function Bookings() {
         truck_type: newBookingForm.truckType,
         contact_name: newBookingForm.contactName,
         contact_phone: newBookingForm.contactPhone,
+        pickup_lat: newBookingForm.pickupLat ?? undefined,
+        pickup_lng: newBookingForm.pickupLng ?? undefined,
+        dropoff_lat: newBookingForm.dropoffLat ?? undefined,
+        dropoff_lng: newBookingForm.dropoffLng ?? undefined,
       });
       toast.success("Booking created successfully");
       setNewBookingOpen(false);
@@ -304,22 +459,40 @@ export function Bookings() {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="pickupAddress">Pickup Address</Label>
-              <Input
-                ref={pickupInputRef}
+              <AddressInput
                 id="pickupAddress"
                 placeholder="Enter pickup address"
                 value={newBookingForm.pickupAddress}
-                onChange={(e) => updateFormField('pickupAddress', e.target.value)}
+                onChange={(value) =>
+                  setNewBookingForm((prev) => ({ ...prev, pickupAddress: value, pickupLat: null, pickupLng: null }))
+                }
+                onSelect={(place) =>
+                  setNewBookingForm((prev) => ({
+                    ...prev,
+                    pickupAddress: place.address,
+                    pickupLat: place.lat,
+                    pickupLng: place.lng,
+                  }))
+                }
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="dropoffAddress">Dropoff Address</Label>
-              <Input
-                ref={dropoffInputRef}
+              <AddressInput
                 id="dropoffAddress"
                 placeholder="Enter dropoff address"
                 value={newBookingForm.dropoffAddress}
-                onChange={(e) => updateFormField('dropoffAddress', e.target.value)}
+                onChange={(value) =>
+                  setNewBookingForm((prev) => ({ ...prev, dropoffAddress: value, dropoffLat: null, dropoffLng: null }))
+                }
+                onSelect={(place) =>
+                  setNewBookingForm((prev) => ({
+                    ...prev,
+                    dropoffAddress: place.address,
+                    dropoffLat: place.lat,
+                    dropoffLng: place.lng,
+                  }))
+                }
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1046,12 +1219,88 @@ export function Bookings() {
               </select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="edit-driver">Assigned driver</Label>
-              <select id="edit-driver" value={editForm.driver_id} onChange={(e) => setEditForm({ ...editForm, driver_id: e.target.value })}
-                className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/20">
-                <option value="">Unassigned</option>
-                {editDrivers.map((d) => <option key={d.id} value={d.id}>{d.full_name || d.email}{d.status !== 'active' ? ` (${d.status})` : ''}</option>)}
-              </select>
+              <div className="flex items-center justify-between">
+                <Label>Assigned driver</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => { if (editBooking) void loadAssignable(editBooking); }}
+                  disabled={assignableLoading}
+                >
+                  <RefreshCw className={cn('w-3 h-3 mr-1', assignableLoading && 'animate-spin')} />
+                  Refresh
+                </Button>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Assigned driver"
+                className="rounded-lg border border-border divide-y divide-border max-h-64 overflow-y-auto"
+              >
+                <DriverOption
+                  selected={!editForm.driver_id}
+                  onSelect={() => setEditForm({ ...editForm, driver_id: '' })}
+                  title="Unassigned"
+                  subtitle="Leave this booking without a driver"
+                />
+                {assignableLoading ? (
+                  <div className="p-3 space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <Skeleton className="w-4 h-4 rounded-full" />
+                        <div className="flex-1 space-y-1.5">
+                          <Skeleton className="h-4 w-40" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : assignableError ? (
+                  <div className="p-3 text-sm text-red-600">{assignableError}</div>
+                ) : assignable.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground text-center">
+                    <p>{assignableMessage || 'No active drivers in your company yet — invite drivers from the Drivers page'}</p>
+                    <button
+                      type="button"
+                      className="mt-2 text-[#F97316] hover:underline font-medium"
+                      onClick={() => { setEditBooking(null); navigateToSection('drivers'); }}
+                    >
+                      Go to Drivers
+                    </button>
+                  </div>
+                ) : (
+                  assignable.map((d) => {
+                    const reason = driverStatusReason(d.account_status);
+                    return (
+                      <DriverOption
+                        key={d.id}
+                        selected={editForm.driver_id === d.id}
+                        disabled={!!reason}
+                        reason={reason}
+                        onSelect={() => setEditForm({ ...editForm, driver_id: d.id })}
+                        title={d.name}
+                        subtitle={[d.truck_type, d.truck_plate_number].filter(Boolean).join(' · ')}
+                        rating={d.rating}
+                        isOnline={d.is_online}
+                        isAvailable={d.is_available}
+                        onJob={d.on_job}
+                      />
+                    );
+                  })
+                )}
+                {!assignableLoading && editBooking?.driver_id && !assignable.some((d) => d.id === editBooking.driver_id) && (
+                  <DriverOption
+                    selected={editForm.driver_id === editBooking.driver_id}
+                    onSelect={() => setEditForm({ ...editForm, driver_id: editBooking.driver_id || '' })}
+                    title={editBooking.driver_name || 'Current driver'}
+                    subtitle="Currently assigned — not in your active roster"
+                  />
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Only active drivers registered under your company can be assigned.
+              </p>
             </div>
           </div>
           <DialogFooter>

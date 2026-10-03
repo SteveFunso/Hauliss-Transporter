@@ -1,6 +1,22 @@
-import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { Header } from '@/components/layout/Header';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  LayoutDashboard,
+  Users as UsersIcon,
+  Truck,
+  ClipboardList,
+  Wallet as WalletIcon,
+  CreditCard,
+  FileText,
+  MessageSquare,
+  Settings as SettingsIcon,
+  Building2,
+  BarChart3,
+  MapPin,
+  ShieldCheck,
+  Route as RouteIcon,
+} from 'lucide-react';
+import { Sidebar, type SidebarMenuItem } from '@/components/layout/Sidebar';
+import { Header, type NavigateOptions } from '@/components/layout/Header';
 import { Dashboard } from '@/sections/Dashboard';
 import { Users } from '@/sections/Users';
 import { Drivers } from '@/sections/Drivers';
@@ -57,11 +73,59 @@ const sectionTitles: Record<string, string> = {
   settings: 'Settings',
 };
 
-function AppContent() {
-  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeSection, setActiveSection] = useState('dashboard');
+// The 14 navigable sections — drives the sidebar and the header search.
+const menuItems: SidebarMenuItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'users', label: 'Users', icon: UsersIcon },
+  { id: 'drivers', label: 'Drivers', icon: Truck },
+  { id: 'fleet', label: 'Fleet Management', icon: Building2 },
+  { id: 'routes', label: 'Service Routes', icon: RouteIcon },
+  { id: 'bookings', label: 'Bookings', icon: ClipboardList },
+  { id: 'tracking', label: 'Live Tracking', icon: MapPin },
+  { id: 'wallet', label: 'Wallets', icon: WalletIcon },
+  { id: 'payments', label: 'Payments', icon: CreditCard },
+  { id: 'pricing', label: 'Pricing', icon: BarChart3 },
+  { id: 'reports', label: 'Reports', icon: FileText },
+  { id: 'support', label: 'Support', icon: MessageSquare },
+  { id: 'compliance', label: 'Compliance', icon: ShieldCheck },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon },
+];
+
+const DEFAULT_SECTION = 'dashboard';
+const SECTION_IDS = new Set(Object.keys(sectionComponents));
+const SIDEBAR_COLLAPSED_KEY = 'hauliss_sidebar_collapsed';
+const THEME_KEY = 'hauliss_theme';
+
+/** `#bookings` → 'bookings'; anything unknown (or no hash) → dashboard. */
+function sectionFromHash(): string {
+  const raw = window.location.hash
+    .replace(/^#\/?/, '')
+    .split(/[/?&]/)[0]
+    .trim()
+    .toLowerCase();
+  return SECTION_IDS.has(raw) ? raw : DEFAULT_SECTION;
+}
+
+/**
+ * The authenticated shell: sidebar + header + active section. Mounted only
+ * while signed in, so drawer/section state naturally resets on logout.
+ */
+function Shell() {
+  // Desktop rail state (persisted) and the separate mobile drawer state.
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  );
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // The URL hash is the source of truth for the active section so Back/Forward
+  // and deep links work (#dashboard, #users, …).
+  const [activeSection, setActiveSection] = useState<string>(sectionFromHash);
+  const [sectionNonce, setSectionNonce] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const activeRef = useRef(activeSection);
+
+  useEffect(() => {
+    activeRef.current = activeSection;
+  }, [activeSection]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -70,17 +134,86 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Cross-section navigation events (e.g. Dashboard tiles). Must be declared
-  // BEFORE the early returns below — hooks after a conditional return violate
-  // the Rules of Hooks (React #310: more hooks after login than before).
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+  }, [collapsed]);
+
+  const openMobile = useCallback(() => setMobileOpen(true), []);
+  const closeMobile = useCallback(() => setMobileOpen(false), []);
+  const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
+
+  const navigate = useCallback((section: string, options?: NavigateOptions) => {
+    const next = SECTION_IDS.has(section) ? section : DEFAULT_SECTION;
+    if (options?.remount && activeRef.current === next) {
+      setSectionNonce((n) => n + 1);
+    }
+    setActiveSection(next);
+    if (window.location.hash !== `#${next}`) {
+      window.location.hash = next;
+    }
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setActiveSection(sectionFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    if (!window.location.hash) {
+      window.history.replaceState(null, '', `#${sectionFromHash()}`);
+    }
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  // Cross-section navigation events (e.g. Dashboard tiles).
   useEffect(() => {
     const handleNavigate = (e: Event) => {
       const section = (e as CustomEvent<string>).detail;
-      if (section) setActiveSection(section);
+      if (section) navigate(section);
     };
-    window.addEventListener("navigate:section", handleNavigate);
-    return () => window.removeEventListener("navigate:section", handleNavigate);
-  }, []);
+    window.addEventListener('navigate:section', handleNavigate);
+    return () => window.removeEventListener('navigate:section', handleNavigate);
+  }, [navigate]);
+
+  const handleSetActiveSection = (section: string) => {
+    navigate(section);
+    setMobileOpen(false);
+  };
+
+  return (
+    <div className={cn(
+      'min-h-screen bg-background transition-all duration-300',
+      isLoading && 'opacity-0'
+    )}>
+      <Sidebar
+        items={menuItems}
+        collapsed={collapsed}
+        mobileOpen={mobileOpen}
+        activeItem={activeSection}
+        onToggleCollapsed={toggleCollapsed}
+        onMobileClose={closeMobile}
+        onSetActive={handleSetActiveSection}
+      />
+
+      <main className={cn(
+        'min-h-screen min-w-0 transition-all duration-300',
+        collapsed ? 'lg:ml-[80px]' : 'lg:ml-[280px]'
+      )}>
+        <Header
+          sections={menuItems}
+          sidebarCollapsed={collapsed}
+          onOpenMobileSidebar={openMobile}
+          pageTitle={sectionTitles[activeSection] || 'Dashboard'}
+          onNavigate={navigate}
+        />
+
+        <div key={sectionNonce} className="pt-20">
+          {sectionComponents[activeSection] || <Dashboard />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function AppContent() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   if (authLoading) {
     return (
@@ -96,51 +229,7 @@ function AppContent() {
     return <UnauthenticatedSwitcher />;
   }
 
-  const handleToggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
-
-  const handleSetActiveSection = (section: string) => {
-    setActiveSection(section);
-  };
-
-  return (
-    <div className={cn(
-      'min-h-screen bg-background transition-all duration-300',
-      isLoading && 'opacity-0'
-    )}>
-      <Sidebar
-        isOpen={sidebarOpen}
-        activeItem={activeSection}
-        onToggle={handleToggleSidebar}
-        onSetActive={handleSetActiveSection}
-      />
-
-      {!sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(true)}
-        />
-      )}
-
-      <main className={cn(
-        'min-h-screen transition-all duration-300',
-        sidebarOpen ? 'lg:ml-[280px]' : 'lg:ml-[80px]'
-      )}>
-        <Header
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={handleToggleSidebar}
-          pageTitle={sectionTitles[activeSection] || 'Dashboard'}
-          user={user}
-          onLogout={logout}
-        />
-
-        <div className="pt-20">
-          {sectionComponents[activeSection] || <Dashboard />}
-        </div>
-      </main>
-    </div>
-  );
+  return <Shell />;
 }
 
 // Switches between Login and Register for unauthenticated users.
@@ -161,6 +250,12 @@ function UnauthenticatedSwitcher() {
 }
 
 function App() {
+  // Persisted dark/light preference must win before the first paint of any
+  // section (the header toggle writes the same key).
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', localStorage.getItem(THEME_KEY) === 'dark');
+  }, []);
+
   return (
     <AuthProvider>
       <AppContent />

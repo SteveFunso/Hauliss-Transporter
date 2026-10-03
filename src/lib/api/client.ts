@@ -15,15 +15,39 @@ export type ApiError = {
   errors?: any[];
 };
 
+/** Thrown for every non-2xx response so callers can branch on the HTTP status. */
+export class HttpError extends Error {
+  status: number;
+  body: any;
+
+  constructor(status: number, message: string, body?: any) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+const ACCESS_TOKEN_KEY = "hauliss_access_token";
+const REFRESH_TOKEN_KEY = "hauliss_refresh_token";
+const USER_KEY = "hauliss_user";
+
 const getAuthToken = (): string | null => {
-  return localStorage.getItem("hauliss_access_token");
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
 };
 
 const getRefreshTokenValue = (): string | null => {
-  return localStorage.getItem("hauliss_refresh_token");
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
 };
 
-async function refreshAccessToken(): Promise<string | null> {
+/** Wipe every persisted session key (access + refresh tokens and the cached user). */
+export function clearStoredSession() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+async function performTokenRefresh(): Promise<string | null> {
   const refreshToken = getRefreshTokenValue();
   if (!refreshToken) return null;
 
@@ -42,12 +66,33 @@ async function refreshAccessToken(): Promise<string | null> {
     const body = await res.json();
     const tokens = body?.data ?? body;
     if (!tokens?.access_token) return null;
-    localStorage.setItem("hauliss_access_token", tokens.access_token);
-    if (tokens.refresh_token) localStorage.setItem("hauliss_refresh_token", tokens.refresh_token);
+    localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+    if (tokens.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
     return tokens.access_token;
   } catch {
     return null;
   }
+}
+
+// Single-flight refresh: when several requests hit 401 at the same moment
+// (e.g. the dashboard's parallel fetches after the access token expires) they
+// all await ONE refresh call instead of racing each other — a race here rotates
+// the refresh token multiple times and logs the user out spuriously.
+let refreshInFlight: Promise<string | null> | null = null;
+
+function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = performTokenRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+function forceLogout(): never {
+  clearStoredSession();
+  window.dispatchEvent(new Event("auth:logout"));
+  throw new HttpError(401, "Session expired. Please log in again.");
 }
 
 async function request<T>(
@@ -70,22 +115,35 @@ async function request<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401 && retry) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      return request<T>(method, path, body, false);
+  // 401 only — a 403 is an authorisation answer for THIS resource, not a dead
+  // session, so it must never log the user out.
+  if (res.status === 401) {
+    if (retry) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        return request<T>(method, path, body, false);
+      }
     }
-    // Clear auth state and redirect to login
-    localStorage.removeItem("hauliss_access_token");
-    localStorage.removeItem("hauliss_refresh_token");
-    localStorage.removeItem("hauliss_user");
-    window.dispatchEvent(new Event("auth:logout"));
-    throw new Error("Session expired. Please log in again.");
+    // No refresh token, the refresh failed, or the retried request was rejected
+    // again with the fresh token (QA TP-AUTH-11: corrupted tokens) — the session
+    // is unrecoverable, so clear it and bounce to the login screen.
+    return forceLogout();
   }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message || `Request failed: ${res.status}`);
+    throw new HttpError(res.status, error?.message || `Request failed: ${res.status}`, error);
+  }
+
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  // A 2xx that is not JSON (an HTML error page from a proxy/CDN, an empty
+  // stub) must not be handed to callers as if it were data.
+  const contentType = res.headers.get("content-type") || "";
+  if (!/json/i.test(contentType)) {
+    throw new HttpError(res.status, `Request failed: ${res.status}`);
   }
 
   return res.json();

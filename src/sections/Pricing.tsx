@@ -1,32 +1,18 @@
-import { useState, useEffect } from 'react';
 import {
-  Plus,
-  Edit,
-  Trash2,
-  MoreVertical,
   Truck,
   Clock,
-  Zap
+  Zap,
+  Percent,
+  Banknote,
+  Receipt,
+  ArrowRight,
+  Info,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -37,468 +23,256 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApi } from '@/hooks/useApi';
-import { getTruckTypes, updateTruckType, deleteTruckType, createTruckType, type TruckType } from '@/lib/api/fleet';
-import { getSettings, updateSettings } from '@/lib/api/settings';
-import { toast } from 'sonner';
+import { getPlatformRateCard } from '@/lib/api/pricing';
 
-type PricingConfig = TruckType & { active: boolean };
+/**
+ * QA TP-PRC-05/06: for a company admin this page is a READ-ONLY view of the
+ * platform rate card (commission, payout terms, base rates, surge rules) from
+ * GET /api/admin/pricing. The previous commission editor and truck-type
+ * create/edit/delete controls wrote to an in-memory platform catalogue and
+ * were removed; a transporter prices its own routes under Service Routes.
+ */
 
-const defaultFormData = { name: '', basePrice: '', minPrice: '', maxPrice: '', capacity: '' };
+const formatNaira = (minor: number) =>
+  new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format((Number.isFinite(minor) ? minor : 0) / 100);
+
+const formatPercent = (rate: number) => {
+  const n = Number.isFinite(rate) ? rate : 0;
+  return `${Number.isInteger(n) ? n : n.toFixed(2).replace(/\.?0+$/, '')}%`;
+};
+
+const humanize = (value?: string | null) =>
+  String(value || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const formatMultiplier = (m: number) => {
+  const n = Number.isFinite(m) ? m : 1;
+  return `×${Number.isInteger(n) ? n : n.toFixed(2).replace(/\.?0+$/, '')}`;
+};
 
 export function Pricing() {
-  const { data: truckTypes, isLoading, error, refetch } = useApi(() => getTruckTypes(), []);
-  const { data: settings } = useApi(() => getSettings(), []);
-  const [configs, setConfigs] = useState<PricingConfig[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingConfig, setEditingConfig] = useState<PricingConfig | null>(null);
-  const [commissionRate, setCommissionRate] = useState<number>(10);
-  const [savingCommission, setSavingCommission] = useState(false);
-  const [formData, setFormData] = useState(defaultFormData);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [formSaving, setFormSaving] = useState(false);
-  const [toggleLoading, setToggleLoading] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const { data: rateCard, isLoading, error, refetch } = useApi(() => getPlatformRateCard(), []);
 
-  useEffect(() => {
-    if (Array.isArray(truckTypes)) {
-      setConfigs(truckTypes.map(t => ({ ...t, active: t.is_available })));
-    }
-  }, [truckTypes]);
-
-  useEffect(() => {
-    if (settings) {
-      const pcr = settings.platform_commission_rate;
-      const ratePct = (typeof pcr === 'object' ? Number((pcr as any)?.value) : Number(pcr)) * 100;
-      setCommissionRate(Number.isFinite(ratePct) ? ratePct : 10);
-    }
-  }, [settings]);
-
-  const handleToggleActive = async (id: string) => {
-    const config = configs.find(c => c.id === id);
-    if (!config) return;
-    const newActive = !config.active;
-    setToggleLoading(id);
-    try {
-      await updateTruckType(id, { is_available: newActive });
-      setConfigs(prev => prev.map(c => c.id === id ? { ...c, active: newActive } : c));
-      toast.success(`Status updated to ${newActive ? 'Active' : 'Inactive'}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update status');
-    } finally {
-      setToggleLoading(null);
-    }
+  const goToRoutes = () => {
+    window.dispatchEvent(new CustomEvent('navigate:section', { detail: 'routes' }));
   };
 
-  const handleDeleteConfirm = async (id: string) => {
-    setDeleteLoading(true);
-    try {
-      await deleteTruckType(id);
-      setConfigs(prev => prev.filter(config => config.id !== id));
-      toast.success('Pricing removed');
-      setDeleteConfirmId(null);
-      refetch();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete pricing');
-    } finally {
-      setDeleteLoading(false);
-    }
-  };
+  const commission = rateCard?.commission_rate ?? 0;
+  const transporterShare = Math.max(0, 100 - commission);
+  const baseRates = rateCard?.base_rates ?? [];
+  const activeSurgeRules = (rateCard?.surge_rules ?? []).filter((r) => r.is_active);
 
-  const handleOpenEdit = (config: PricingConfig) => {
-    setEditingConfig(config);
-    setFormData({
-      name: config.name,
-      basePrice: String(config.base_price),
-      minPrice: String(config.min_price),
-      maxPrice: String(config.max_price),
-      capacity: config.capacity,
-    });
-  };
-
-  const handleFormSubmit = async () => {
-    if (!formData.name.trim()) {
-      toast.error('Please enter a pricing name');
-      return;
-    }
-    if (!formData.capacity.trim()) {
-      toast.error('Please enter a capacity');
-      return;
-    }
-    const basePrice = Number(formData.basePrice);
-    const minPrice = Number(formData.minPrice);
-    const maxPrice = Number(formData.maxPrice);
-    if (!Number.isFinite(basePrice) || basePrice <= 0) {
-      toast.error('Base price must be greater than 0');
-      return;
-    }
-    if (!Number.isFinite(minPrice) || minPrice <= 0) {
-      toast.error('Min price must be greater than 0');
-      return;
-    }
-    if (!Number.isFinite(maxPrice) || maxPrice <= 0) {
-      toast.error('Max price must be greater than 0');
-      return;
-    }
-    if (minPrice > maxPrice) {
-      toast.error('Min price cannot be greater than max price');
-      return;
-    }
-    setFormSaving(true);
-    try {
-      if (editingConfig) {
-        await updateTruckType(editingConfig.id, {
-          name: formData.name,
-          base_price: basePrice,
-          min_price: minPrice,
-          max_price: maxPrice,
-          capacity: formData.capacity,
-        });
-        toast.success('Pricing updated');
-      } else {
-        await createTruckType({
-          name: formData.name,
-          capacity: formData.capacity,
-          base_price: basePrice,
-          min_price: minPrice,
-          max_price: maxPrice,
-          is_available: true,
-        });
-        toast.success('Pricing configuration created');
-      }
-      setShowForm(false);
-      setEditingConfig(null);
-      setFormData(defaultFormData);
-      refetch();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save pricing');
-    } finally {
-      setFormSaving(false);
-    }
-  };
-
-  const handleSaveCommission = async () => {
-    if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 100) {
-      toast.error('Commission must be a number between 0 and 100');
-      return;
-    }
-    setSavingCommission(true);
-    try {
-      await updateSettings({ platform_commission_rate: { value: commissionRate / 100 } });
-      toast.success('Commission rates updated');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update commission');
-    } finally {
-      setSavingCommission(false);
-    }
-  };
-
-  const getTruckTypeIcon = (_type: string) => {
-    return <Truck className="w-5 h-5" />;
-  };
-
-  const driverCommission = 100 - commissionRate;
+  const kpis = [
+    {
+      label: 'Platform commission',
+      value: formatPercent(commission),
+      hint: `You keep ${formatPercent(transporterShare)} of each fare`,
+      icon: Percent,
+      color: 'bg-[#F97316]/10 text-[#F97316]',
+    },
+    {
+      label: 'Payout frequency',
+      value: rateCard?.payout_frequency ? humanize(rateCard.payout_frequency) : '—',
+      hint: 'How often earnings are paid out',
+      icon: Clock,
+      color: 'bg-blue-100 text-blue-600',
+    },
+    {
+      label: 'Minimum payout',
+      value: formatNaira(rateCard?.min_payout_minor ?? 0),
+      hint: 'Minimum balance before a payout is made',
+      icon: Banknote,
+      color: 'bg-emerald-100 text-emerald-600',
+    },
+    {
+      label: 'Processing fee',
+      value: formatNaira(rateCard?.payout_fee_minor ?? 0),
+      hint: 'Charged per payout',
+      icon: Receipt,
+      color: 'bg-amber-100 text-amber-600',
+    },
+  ];
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="font-display font-semibold text-2xl text-foreground">Pricing Configuration</h2>
+          <h2 className="font-display font-semibold text-2xl text-foreground">Platform Rate Card</h2>
           <p className="text-muted-foreground mt-1">
-            Manage pricing models and commission structures for different truck types
+            Commission, payout terms and base rates that apply to your company
           </p>
         </div>
         <Button
           className="bg-[#F97316] hover:bg-[#F97316]/90 text-white gap-2"
-          onClick={() => setShowForm(true)}
+          onClick={goToRoutes}
         >
-          <Plus className="w-4 h-4" />
-          Add Pricing
+          Configure Route Prices
+          <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
 
-      {/* Pricing Table */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader>
-          <CardTitle className="font-display font-semibold text-lg">
-            Pricing Models ({configs.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="w-10 h-10 rounded-lg" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-6 w-12 rounded-full" />
-                </div>
-              ))}
-            </div>
-          ) : error ? (
-            <div className="text-center py-8">
-              <p className="text-red-500 mb-2">{error}</p>
-              <Button variant="outline" onClick={refetch}>Try Again</Button>
-            </div>
-          ) : configs.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No pricing models found
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Truck Type</TableHead>
-                  <TableHead>Base Price</TableHead>
-                  <TableHead>Min Price</TableHead>
-                  <TableHead>Max Price</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {configs.map((config) => (
-                  <TableRow key={config.id} className="hover:bg-muted/50">
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-[#F97316]/10 flex items-center justify-center text-[#F97316]">
-                          {getTruckTypeIcon(config.name)}
-                        </div>
-                        <div>
-                          <p className="font-medium">{config.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {config.capacity}
-                          </p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">₦{Number(config.base_price ?? 0).toLocaleString()}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">₦{Number(config.min_price ?? 0).toLocaleString()}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">₦{Number(config.max_price ?? 0).toLocaleString()}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">{config.rating != null ? Number(config.rating).toFixed(1) : 'N/A'}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={config.active}
-                          disabled={toggleLoading === config.id}
-                          onCheckedChange={() => handleToggleActive(config.id)}
-                        />
-                        <Badge className={config.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'}>
-                          {toggleLoading === config.id ? '...' : (config.active ? 'Active' : 'Inactive')}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleOpenEdit(config)}>
-                            <Edit className="w-4 h-4 mr-2" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-600"
-                            onClick={() => setDeleteConfirmId(config.id)}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Commission Settings */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="font-display font-semibold text-lg flex items-center gap-2">
-              <Zap className="w-5 h-5 text-[#F97316]" /> Commission Settings
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-              <div>
-                <p className="font-medium">Platform Commission</p>
-                <p className="text-sm text-muted-foreground">Percentage taken from each trip</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={commissionRate}
-                  onChange={(e) => setCommissionRate(Number(e.target.value))}
-                  className="w-20 text-right font-bold text-lg"
-                />
-                <span className="text-muted-foreground">%</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-              <div>
-                <p className="font-medium">Driver Commission</p>
-                <p className="text-sm text-muted-foreground">Percentage paid to drivers</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold">{driverCommission}</span>
-                <span className="text-muted-foreground">%</span>
-              </div>
-            </div>
-            <Button
-              className="w-full bg-[#F97316] hover:bg-[#F97316]/90 text-white"
-              onClick={handleSaveCommission}
-              disabled={savingCommission}
-            >
-              {savingCommission ? 'Saving...' : 'Update Commission Rates'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="font-display font-semibold text-lg flex items-center gap-2">
-              <Clock className="w-5 h-5 text-[#F97316]" /> Payout Settings
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-              <div>
-                <p className="font-medium">Payout Frequency</p>
-                <p className="text-sm text-muted-foreground">How often drivers get paid</p>
-              </div>
-              <Badge className="bg-[#F97316]/10 text-[#F97316]">
-                {typeof settings?.payout_frequency === 'object' ? (settings.payout_frequency as any)?.value : settings?.payout_frequency ?? 'Weekly'}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-              <div>
-                <p className="font-medium">Minimum Payout</p>
-                <p className="text-sm text-muted-foreground">Minimum balance to withdraw</p>
-              </div>
-              <span className="text-lg font-bold">
-                ₦{(((typeof settings?.min_payout === 'object' ? (settings.min_payout as any)?.value : settings?.min_payout) ?? 500000) / 100).toLocaleString()}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-              <div>
-                <p className="font-medium">Processing Fee</p>
-                <p className="text-sm text-muted-foreground">Fee per withdrawal</p>
-              </div>
-              <span className="text-lg font-bold">
-                ₦{(((typeof settings?.payout_fee === 'object' ? (settings.payout_fee as any)?.value : settings?.payout_fee) ?? 5000) / 100).toLocaleString()}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Read-only notice */}
+      <div className="flex items-start gap-3 p-4 rounded-lg bg-[#F97316]/10 text-sm">
+        <Info className="w-5 h-5 text-[#F97316] shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium text-foreground">Rates and fees are set by Hauliss.</p>
+          <p className="text-muted-foreground">
+            Configure your own route prices under{' '}
+            <button type="button" onClick={goToRoutes} className="text-[#F97316] font-medium hover:underline">
+              Service Routes
+            </button>
+            .
+          </p>
+        </div>
       </div>
 
-      {/* Pricing Form Dialog */}
-      <Dialog open={showForm || !!editingConfig} onOpenChange={(open) => { if (!open) { setShowForm(false); setEditingConfig(null); setFormData(defaultFormData); } }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display font-semibold">
-              {editingConfig ? 'Edit Pricing' : 'Add New Pricing'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Pricing Name</Label>
-              <Input
-                placeholder="e.g., Standard Flatbed"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Base Price (NGN)</Label>
-                <Input
-                  type="number"
-                  placeholder="5000"
-                  value={formData.basePrice}
-                  onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Min Price (NGN)</Label>
-                <Input
-                  type="number"
-                  placeholder="3000"
-                  value={formData.minPrice}
-                  onChange={(e) => setFormData({ ...formData, minPrice: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Max Price (NGN)</Label>
-                <Input
-                  type="number"
-                  placeholder="50000"
-                  value={formData.maxPrice}
-                  onChange={(e) => setFormData({ ...formData, maxPrice: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Capacity</Label>
-                <Input
-                  placeholder="e.g., 10 tons"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                />
-              </div>
-            </div>
+      {error ? (
+        <Card className="border-0 shadow-sm">
+          <CardContent className="py-12 flex flex-col items-center text-center gap-3">
+            <AlertCircle className="w-8 h-8 text-red-500" />
+            <p className="font-medium">Failed to load the rate card</p>
+            <p className="text-sm text-muted-foreground max-w-md">{error}</p>
+            <Button variant="outline" className="gap-2 mt-2" onClick={refetch}>
+              <RefreshCw className="w-4 h-4" /> Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* KPI cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {kpis.map((kpi) => (
+              <Card key={kpi.label} className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm text-muted-foreground">{kpi.label}</p>
+                      {isLoading ? (
+                        <Skeleton className="h-8 w-24 mt-1" />
+                      ) : (
+                        <p className="text-2xl font-semibold truncate">{kpi.value}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">{kpi.hint}</p>
+                    </div>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${kpi.color}`}>
+                      <kpi.icon className="w-6 h-6" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowForm(false); setEditingConfig(null); setFormData(defaultFormData); }} disabled={formSaving}>
-              Cancel
-            </Button>
-            <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleFormSubmit} disabled={formSaving}>
-              {formSaving ? 'Saving...' : (editingConfig ? 'Update' : 'Create')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="font-display font-semibold">Confirm Delete</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to remove this pricing configuration? This action cannot be undone.</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)} disabled={deleteLoading}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteConfirmId && handleDeleteConfirm(deleteConfirmId)} disabled={deleteLoading}>
-              {deleteLoading ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {/* Base rates per truck type */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="font-display font-semibold text-lg flex items-center gap-2">
+                <Truck className="w-5 h-5 text-[#F97316]" /> Base Rates by Truck Type
+                {!isLoading && baseRates.length > 0 && (
+                  <span className="text-muted-foreground font-normal text-base">({baseRates.length})</span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <Skeleton className="w-10 h-10 rounded-lg" />
+                      <Skeleton className="h-4 w-32 flex-1" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : baseRates.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No base rates have been published yet
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Truck Type</TableHead>
+                      <TableHead>Base Fare</TableHead>
+                      <TableHead>Per km</TableHead>
+                      <TableHead>Minimum Fare</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {baseRates.map((rate, i) => (
+                      <TableRow key={`${rate.truck_type}-${i}`} className="hover:bg-muted/50">
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-[#F97316]/10 flex items-center justify-center text-[#F97316]">
+                              <Truck className="w-5 h-5" />
+                            </div>
+                            <p className="font-medium">{humanize(rate.truck_type) || '—'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell><span className="font-medium">{formatNaira(rate.base_fare_minor)}</span></TableCell>
+                        <TableCell><span className="font-medium">{formatNaira(rate.per_km_minor)}</span></TableCell>
+                        <TableCell><span className="font-medium">{formatNaira(rate.min_fare_minor)}</span></TableCell>
+                        <TableCell>
+                          <Badge className={rate.is_active ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-100'}>
+                            {rate.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Surge rules */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="font-display font-semibold text-lg flex items-center gap-2">
+                <Zap className="w-5 h-5 text-[#F97316]" /> Active Surge Rules
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : activeSurgeRules.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No surge rules are currently active
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {activeSurgeRules.map((rule, i) => (
+                    <div key={`${rule.name}-${i}`} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="font-medium">{rule.name || 'Surge rule'}</p>
+                        <p className="text-sm text-muted-foreground">Applied on top of the base fare</p>
+                      </div>
+                      <Badge className="bg-[#F97316]/10 text-[#F97316] hover:bg-[#F97316]/10 text-base font-semibold">
+                        {formatMultiplier(rule.multiplier)}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

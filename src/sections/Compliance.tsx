@@ -36,7 +36,7 @@ export function Compliance() {
   };
 
   const stats = [
-    { label: 'Drivers with documents', value: summary?.total_drivers, icon: Users, color: 'bg-blue-100 text-blue-600' },
+    { label: 'Drivers tracked', value: summary?.total_drivers, icon: Users, color: 'bg-blue-100 text-blue-600' },
     { label: 'Fully compliant', value: summary?.fully_compliant, icon: ShieldCheck, color: 'bg-emerald-100 text-emerald-600' },
     { label: 'Pending review', value: summary?.with_pending, icon: Clock, color: 'bg-amber-100 text-amber-600' },
     { label: 'Rejected documents', value: summary?.with_rejected, icon: XCircle, color: 'bg-red-100 text-red-600' },
@@ -112,23 +112,28 @@ export function Compliance() {
               {!isLoading && drivers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No driver documents on record yet
+                    No drivers on record yet
                   </TableCell>
                 </TableRow>
               )}
+              {/* Drivers with zero documents are real rows too — they render as "No documents", never dropped. */}
               {!isLoading &&
-                drivers.map((d) => (
-                  <TableRow key={d.driver_id}>
+                drivers.map((d, i) => (
+                  <TableRow key={d.driver_id || `${d.full_name ?? 'driver'}-${i}`}>
                     <TableCell>
                       <p className="font-medium">{d.full_name || 'Unknown driver'}</p>
-                      <p className="text-xs text-muted-foreground">{d.phone_number || d.driver_id.slice(0, 8)}</p>
+                      <p className="text-xs text-muted-foreground">{d.phone_number || (d.driver_id || '').slice(0, 8)}</p>
                     </TableCell>
-                    <TableCell>{d.verified}/{d.total}</TableCell>
+                    <TableCell>
+                      {d.total > 0
+                        ? `${d.verified ?? 0}/${d.total}`
+                        : <span className="text-muted-foreground">No documents</span>}
+                    </TableCell>
                     <TableCell>{d.pending || '—'}</TableCell>
                     <TableCell>{d.rejected || '—'}</TableCell>
                     <TableCell>
                       {d.expiring_30d || d.expired
-                        ? `${d.expiring_30d} / ${d.expired}`
+                        ? `${d.expiring_30d || 0} / ${d.expired || 0}`
                         : '—'}
                     </TableCell>
                     <TableCell>{statusBadge(d)}</TableCell>

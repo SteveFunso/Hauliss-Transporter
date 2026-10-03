@@ -14,6 +14,7 @@ export type AdminUser = {
   transporter_id?: string;
   vehicle_type?: string;
   created_at: string;
+  updated_at?: string;
 };
 
 export type UserStats = {
@@ -44,8 +45,16 @@ export const getUsers = (params: UserListParams = {}) => {
   return api.get<ApiResponse<AdminUser[]>>(`/api/admin/users?${qs}`);
 };
 
-export const getUser = (id: string) =>
-  api.get<AdminUser>(`/api/admin/users/${id}`);
+/**
+ * GET /api/admin/users/:id — the full user record. The auth service returns it
+ * flat today; tolerate the standard {data} envelope as well.
+ */
+export const getUser = async (id: string): Promise<AdminUser> => {
+  const res = await api.get<ApiResponse<AdminUser> | AdminUser>(`/api/admin/users/${id}`);
+  const user = (res as any)?.data ?? res;
+  if (!user || typeof user !== "object" || !user.id) throw new Error("User not found");
+  return user as AdminUser;
+};
 
 export const updateUser = (id: string, data: Partial<AdminUser>) =>
   api.patch<{ message: string }>(`/api/admin/users/${id}`, data);
@@ -53,13 +62,32 @@ export const updateUser = (id: string, data: Partial<AdminUser>) =>
 export const getUserStats = () =>
   api.get<UserStats>("/api/admin/users/stats");
 
-export const createUser = (data: {
+export type CreateUserInput = {
   email: string;
-  password: string;
   full_name: string;
   phone_number?: string;
   role?: string;
+  /**
+   * Optional. When omitted the server generates a temporary password, emails a
+   * welcome message and returns the password once in `temporary_password`.
+   */
+  password?: string;
   company_name?: string;
   transporter_id?: string;
   vehicle_type?: string;
-}) => api.post<{ id: string; message: string }>("/api/admin/users", data);
+};
+
+export type CreatedUser = {
+  id: string;
+  email: string;
+  role: string;
+  /** Only present when the server generated the password (none was supplied). */
+  temporary_password?: string;
+  message?: string;
+};
+
+/** POST /api/admin/users — 409 (with a message) when the email is already registered. */
+export const createUser = async (data: CreateUserInput): Promise<CreatedUser> => {
+  const res = await api.post<ApiResponse<CreatedUser> | CreatedUser>("/api/admin/users", data);
+  return ((res as any)?.data ?? res) as CreatedUser;
+};

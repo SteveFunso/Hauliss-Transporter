@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Route,
   MapPin,
@@ -48,7 +48,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { MapView } from '@/components/ui/map-view';
-import { useAddressAutocomplete } from '@/hooks/useAddressAutocomplete';
+import { AddressInput } from '@/components/AddressInput';
 import { useApi } from '@/hooks/useApi';
 import { usePagination } from '@/hooks/usePagination';
 import {
@@ -81,6 +81,13 @@ const defaultAreaForm = {
   state: '',
   zone_type: 'coverage',
   radius_km: '',
+  latitude: null as number | null,
+  longitude: null as number | null,
+};
+
+const finiteCoord = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) && n !== 0 ? n : null;
 };
 
 const defaultPricingForm = {
@@ -139,22 +146,9 @@ function ServiceRoutesTab() {
   const [formData, setFormData] = useState(defaultRouteForm);
   const [submitting, setSubmitting] = useState(false);
 
-  // Geocoded coordinates for map preview
+  // Coordinates from the address picker — map preview + persisted with the route.
   const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
-
-  const originInputRef = useRef<HTMLInputElement>(null);
-  const destInputRef = useRef<HTMLInputElement>(null);
-
-  useAddressAutocomplete(originInputRef, (place) => {
-    setFormData((prev) => ({ ...prev, origin_address: place.address }));
-    setOriginCoords({ lat: place.lat, lng: place.lng });
-  });
-
-  useAddressAutocomplete(destInputRef, (place) => {
-    setFormData((prev) => ({ ...prev, destination_address: place.address }));
-    setDestCoords({ lat: place.lat, lng: place.lng });
-  });
 
   // Build route map markers
   const routeMapMarkers = useMemo(() => {
@@ -222,6 +216,12 @@ function ServiceRoutesTab() {
       distance_km: String(route.distance_km),
       estimated_duration_mins: String(route.estimated_duration_mins),
     });
+    const oLat = finiteCoord(route.origin_lat);
+    const oLng = finiteCoord(route.origin_lng);
+    const dLat = finiteCoord(route.dest_lat);
+    const dLng = finiteCoord(route.dest_lng);
+    setOriginCoords(oLat !== null && oLng !== null ? { lat: oLat, lng: oLng } : null);
+    setDestCoords(dLat !== null && dLng !== null ? { lat: dLat, lng: dLng } : null);
   };
 
   const closeForm = () => {
@@ -249,6 +249,9 @@ function ServiceRoutesTab() {
         destination_address: formData.destination_address,
         distance_km: Number(formData.distance_km) || 0,
         estimated_duration_mins: Number(formData.estimated_duration_mins) || 0,
+        // Coordinates only exist when the address came from a picked suggestion.
+        ...(originCoords ? { origin_lat: originCoords.lat, origin_lng: originCoords.lng } : {}),
+        ...(destCoords ? { dest_lat: destCoords.lat, dest_lng: destCoords.lng } : {}),
       };
       if (editingRoute) {
         await updateRoute(editingRoute.id, payload);
@@ -486,21 +489,35 @@ function ServiceRoutesTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Origin Address</Label>
-              <Input
-                ref={originInputRef}
+              <Label htmlFor="route-origin">Origin Address</Label>
+              <AddressInput
+                id="route-origin"
                 placeholder="e.g., Apapa Port, Lagos"
                 value={formData.origin_address}
-                onChange={(e) => setFormData({ ...formData, origin_address: e.target.value })}
+                onChange={(value) => {
+                  setFormData((prev) => ({ ...prev, origin_address: value }));
+                  setOriginCoords(null);
+                }}
+                onSelect={(place) => {
+                  setFormData((prev) => ({ ...prev, origin_address: place.address }));
+                  setOriginCoords({ lat: place.lat, lng: place.lng });
+                }}
               />
             </div>
             <div className="space-y-2">
-              <Label>Destination Address</Label>
-              <Input
-                ref={destInputRef}
+              <Label htmlFor="route-destination">Destination Address</Label>
+              <AddressInput
+                id="route-destination"
                 placeholder="e.g., Kubwa Industrial Zone, Abuja"
                 value={formData.destination_address}
-                onChange={(e) => setFormData({ ...formData, destination_address: e.target.value })}
+                onChange={(value) => {
+                  setFormData((prev) => ({ ...prev, destination_address: value }));
+                  setDestCoords(null);
+                }}
+                onSelect={(place) => {
+                  setFormData((prev) => ({ ...prev, destination_address: place.address }));
+                  setDestCoords({ lat: place.lat, lng: place.lng });
+                }}
               />
             </div>
             {routeMapMarkers.length > 0 && (
@@ -596,13 +613,18 @@ function CoverageAreasTab() {
     }
     setSubmitting(true);
     try {
-      await createCoverageArea({
+      const payload = {
         area_name: formData.area_name,
         city: formData.city,
         state: formData.state,
         zone_type: formData.zone_type,
         radius_km: Number(formData.radius_km) || 0,
-      });
+        // Centre point from the address picker, when the area was chosen from a suggestion.
+        ...(formData.latitude !== null && formData.longitude !== null
+          ? { latitude: formData.latitude, longitude: formData.longitude }
+          : {}),
+      };
+      await createCoverageArea(payload);
       toast.success('Coverage area created');
       closeForm();
       refetch();
@@ -709,12 +731,28 @@ function CoverageAreasTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Area Name</Label>
-              <Input
+              <Label htmlFor="area-name">Area / Address</Label>
+              <AddressInput
+                id="area-name"
                 placeholder="e.g., Lagos Mainland"
                 value={formData.area_name}
-                onChange={(e) => setFormData({ ...formData, area_name: e.target.value })}
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, area_name: value, latitude: null, longitude: null }))
+                }
+                onSelect={(place) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    area_name: place.area || place.address,
+                    city: place.city || prev.city,
+                    state: place.state || prev.state,
+                    latitude: place.lat,
+                    longitude: place.lng,
+                  }))
+                }
               />
+              <p className="text-xs text-muted-foreground">
+                Pick a suggestion to fill in the city and state automatically.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
