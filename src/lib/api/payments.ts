@@ -72,5 +72,9 @@ export const getPaymentStats = async (): Promise<PaymentStats> => {
   };
 };
 
-export const processRefund = (id: string) =>
-  api.post<{ message: string }>(`/api/admin/payments/${id}/refund`);
+// `manual` records a refund that was returned outside Flutterwave (no gateway call).
+export const processRefund = (id: string, options?: { manual: boolean; note?: string }) =>
+  api.post<{ message: string; manual?: boolean; flutterwave_refund_id?: string | null }>(
+    `/api/admin/payments/${id}/refund`,
+    options
+  );

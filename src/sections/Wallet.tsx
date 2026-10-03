@@ -48,6 +48,8 @@ import { usePagination } from '@/hooks/usePagination';
 import { getPayments, getPaymentStats, processRefund, paymentMinorToMajor, type AdminPayment } from '@/lib/api/payments';
 import type { ApiResponse } from '@/lib/api/client';
 import { toast } from 'sonner';
+import { jsPDF } from 'jspdf';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 // This page reads only GET /api/admin/payments and GET /api/admin/payments/stats
 // (both scoped server-side to the caller's company). Every amount those return
@@ -72,6 +74,10 @@ export function Wallet() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [refundConfirmOpen, setRefundConfirmOpen] = useState(false);
   const [refundTarget, setRefundTarget] = useState<AdminPayment | null>(null);
+  // "Record only" refunds: the money went back outside Flutterwave.
+  const [refundManual, setRefundManual] = useState(false);
+  const [refundNote, setRefundNote] = useState('');
+  const { user } = useAuth();
 
   const pagination = usePagination(15);
 
@@ -102,13 +108,20 @@ export function Wallet() {
   const handleRefund = async (paymentId: string) => {
     setRefundLoading(paymentId);
     try {
-      await processRefund(paymentId);
-      toast.success("Refund processed successfully");
+      const result = await processRefund(
+        paymentId,
+        refundManual ? { manual: true, note: refundNote.trim() || undefined } : undefined
+      );
+      toast.success(result?.message || "Refund processed successfully");
       setRefundConfirmOpen(false);
       setRefundTarget(null);
+      setRefundManual(false);
+      setRefundNote('');
       refetch();
     } catch (err: any) {
-      toast.error(err.message || "Failed to process refund");
+      // The API explains provider rejections ("Flutterwave declined the refund:
+      // transaction not settled…") — show that text, never a bare status code.
+      toast.error(err.message || "Failed to process refund", { duration: 8000 });
     } finally {
       setRefundLoading(null);
     }
@@ -127,27 +140,76 @@ export function Wallet() {
     toast.success("Payments exported to CSV");
   };
 
+  // A real PDF receipt (A4) rather than a text file.
   const downloadReceipt = (payment: AdminPayment) => {
-    const receipt = [
-      "=== PAYMENT RECEIPT ===",
-      "",
-      `Reference: ${payment.tx_ref}`,
-      `Payment ID: ${payment.id}`,
-      `Booking ID: ${payment.booking_id || 'N/A'}`,
-      `Provider: ${payment.provider?.replace('_', ' ') ?? 'Unknown'}`,
-      `Amount: ${formatMinor(payment.amount_minor_units)}`,
-      `Currency: ${payment.currency}`,
-      `Status: ${payment.status}`,
-      `Date: ${new Date(payment.created_at).toLocaleString()}`,
-      "",
-      "========================",
-    ].join("\n");
-    const blob = new Blob([receipt], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `receipt_${payment.tx_ref}.txt`; a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Receipt downloaded");
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const left = 56;
+    const right = pageWidth - 56;
+    const amount = formatMinor(payment.amount_minor_units);
+    const paidOn = new Date(payment.created_at).toLocaleString('en-NG');
+
+    // Brand band
+    doc.setFillColor(249, 115, 22);
+    doc.rect(0, 0, pageWidth, 92, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text('HAULISS', left, 48);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text('Payment receipt', left, 68);
+    doc.setFontSize(9);
+    doc.text(`Generated ${new Date().toLocaleString('en-NG')}`, right, 68, { align: 'right' });
+
+    // Headline amount + status
+    doc.setTextColor(17, 24, 39);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(26);
+    doc.text(amount, left, 150);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Status: ${String(payment.status || '').toUpperCase()}`, left, 172);
+    doc.setDrawColor(229, 231, 235);
+    doc.line(left, 196, right, 196);
+
+    // Details
+    const rows: Array<[string, string]> = [
+      ['Reference', payment.tx_ref || '—'],
+      ['Payment ID', payment.id],
+      ['Booking ID', payment.booking_id || 'N/A'],
+      ['Provider', (payment.provider || 'Unknown').replace('_', ' ')],
+      ['Currency', payment.currency || 'NGN'],
+      ['Paid on', paidOn],
+      ['Transport company', user?.companyName || '—'],
+      ['Transporter ID', user?.transporterId || '—'],
+    ];
+    let y = 226;
+    doc.setFontSize(11);
+    rows.forEach(([label, value]) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(107, 114, 128);
+      doc.text(label, left, y);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(17, 24, 39);
+      doc.text(String(value), 230, y, { maxWidth: right - 230 });
+      y += 26;
+    });
+    doc.setDrawColor(229, 231, 235);
+    doc.line(left, y, right, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(156, 163, 175);
+    doc.text(
+      'Issued by the Hauliss Transporter Portal. This receipt confirms a payment recorded on the Hauliss platform.',
+      left,
+      y + 24,
+      { maxWidth: right - left }
+    );
+
+    doc.save(`receipt_${payment.tx_ref || payment.id}.pdf`);
+    toast.success("Receipt downloaded (PDF)");
   };
 
   const openPaymentDetails = (payment: AdminPayment) => {
@@ -319,6 +381,27 @@ export function Wallet() {
                   <span className="text-sm">{refundTarget.provider?.replace('_', ' ') ?? 'Unknown'}</span>
                 </div>
               </div>
+              <label className="mt-4 flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-[#F97316]"
+                  checked={refundManual}
+                  onChange={(e) => setRefundManual(e.target.checked)}
+                />
+                <span>
+                  The money was returned outside Flutterwave (bank transfer, cash, or a refund raised in the
+                  Flutterwave dashboard). Record it without contacting the gateway.
+                </span>
+              </label>
+              {refundManual && (
+                <Input
+                  className="mt-2"
+                  placeholder="Reference or note (optional)"
+                  value={refundNote}
+                  onChange={(e) => setRefundNote(e.target.value)}
+                  maxLength={120}
+                />
+              )}
             </div>
           )}
           <DialogFooter>
@@ -335,7 +418,7 @@ export function Wallet() {
               ) : (
                 <RefreshCw className="w-4 h-4 mr-2" />
               )}
-              Process Refund
+              {refundManual ? 'Record Refund' : 'Process Refund'}
             </Button>
           </DialogFooter>
         </DialogContent>

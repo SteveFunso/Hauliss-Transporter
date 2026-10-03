@@ -198,7 +198,10 @@ export function Fleet() {
   };
 
   // ---- form ----------------------------------------------------------------
-  const TruckFields = ({ idPrefix }: { idPrefix: string }) => (
+  // Rendered as a plain function call (not a nested component): a component
+  // declared inside Fleet() is a new type on every render, so React remounted
+  // the inputs on each keystroke and the field lost focus after one character.
+  const renderTruckFields = (idPrefix: string) => (
     <div className="grid gap-4 py-2">
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
@@ -468,7 +471,7 @@ export function Fleet() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader><DialogTitle>Register New Truck</DialogTitle><DialogDescription>Add a truck to your fleet register. Only plate and type are required.</DialogDescription></DialogHeader>
-          <TruckFields idPrefix="add" />
+          {renderTruckFields('add')}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>Cancel</Button>
             <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleAdd} disabled={saving}>{saving ? 'Registering…' : 'Register Truck'}</Button>
@@ -480,7 +483,7 @@ export function Fleet() {
       <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditing(null); }}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader><DialogTitle>Edit Truck{editing ? ` · ${editing.plate_number}` : ''}</DialogTitle><DialogDescription>Changes are saved to this truck's record.</DialogDescription></DialogHeader>
-          <TruckFields idPrefix="edit" />
+          {renderTruckFields('edit')}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>Cancel</Button>
             <Button className="bg-[#F97316] hover:bg-[#F97316]/90 text-white" onClick={handleEdit} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Button>
