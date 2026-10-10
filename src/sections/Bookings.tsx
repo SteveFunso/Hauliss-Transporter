@@ -54,6 +54,8 @@ import {
   getBookingStats,
   updateBookingStatus,
   updateBooking,
+  advanceBookingTrip,
+  TRIP_STAGES,
   createBooking,
   getAssignableDrivers,
   type AdminBooking,
@@ -353,11 +355,39 @@ export function Bookings() {
 
   const bookings = bookingsData?.data ?? [];
 
+  // Granular trip stage control (mobile QF46): drives the driver/shipper apps.
+  const [stage, setStage] = useState('');
+  const [stageSeq, setStageSeq] = useState('');
+  const [stageLoading, setStageLoading] = useState(false);
+  const applyStage = async (bookingId: string) => {
+    if (!stage) return;
+    const picked = TRIP_STAGES.find((s) => s.value === stage);
+    const seq = stageSeq.trim() === '' ? undefined : Number(stageSeq);
+    if (picked?.needsStop && seq !== undefined && !Number.isInteger(seq)) {
+      toast.error('Stop number must be a whole number (0 = pickup)');
+      return;
+    }
+    setStageLoading(true);
+    try {
+      const r = await advanceBookingTrip(bookingId, { status: stage, sequence: seq });
+      toast.success(`Trip moved to ${picked?.label || stage}${r?.booking_status ? ` · booking ${String(r.booking_status).toLowerCase()}` : ''}`);
+      setStage('');
+      setStageSeq('');
+      refetch();
+      setSelectedBooking(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not change the trip stage', { duration: 8000 });
+    } finally {
+      setStageLoading(false);
+    }
+  };
+
   const handleStatusUpdate = async (bookingId: string, newStatus: string) => {
     setActionLoading(bookingId);
     try {
-      await updateBookingStatus(bookingId, newStatus);
-      toast.success(`Booking ${newStatus.toLowerCase()} successfully`);
+      const r = await updateBookingStatus(bookingId, newStatus);
+      const stageNote = r?.trip_stage?.skipped ? ` (${r.trip_stage.message})` : r?.trip_stage ? ' — driver and shipper apps updated' : '';
+      toast.success(`Booking ${newStatus.toLowerCase()} successfully${stageNote}`, { duration: stageNote ? 8000 : 4000 });
       refetch();
       if (selectedBooking?.id === bookingId) {
         setSelectedBooking(null);
@@ -1161,6 +1191,41 @@ export function Bookings() {
                       )}
                       Mark Completed
                     </Button>
+                  )}
+                  {['assigned', 'dispatched', 'in_transit'].includes(selectedBooking.status.toLowerCase()) && (
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <p className="text-sm font-medium">Advance trip stage</p>
+                      <p className="text-xs text-muted-foreground">
+                        Moves the trip exactly as the driver app would; the driver and shipper apps update live.
+                        Order: En route → Arrived (stop 0) → Loading → Stop completed (0) → In transit (1) → Arrived (1) → Stop completed (1).
+                      </p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <select
+                          className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                          value={stage}
+                          onChange={(e) => setStage(e.target.value)}
+                          aria-label="Trip stage"
+                        >
+                          <option value="">Select stage…</option>
+                          {TRIP_STAGES.map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </select>
+                        {TRIP_STAGES.find((s) => s.value === stage)?.needsStop && (
+                          <Input
+                            className="w-40"
+                            inputMode="numeric"
+                            placeholder="Stop # (0 = pickup)"
+                            value={stageSeq}
+                            onChange={(e) => setStageSeq(e.target.value)}
+                            aria-label="Stop number"
+                          />
+                        )}
+                        <Button size="sm" onClick={() => applyStage(selectedBooking.id)} disabled={!stage || stageLoading}>
+                          {stageLoading ? 'Applying…' : 'Apply stage'}
+                        </Button>
+                      </div>
+                    </div>
                   )}
                   <div className="flex gap-2">
                     <Button

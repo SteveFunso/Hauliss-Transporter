@@ -68,7 +68,21 @@ export const getBooking = (id: string) =>
   api.get<AdminBooking>(`/api/admin/bookings/${id}`);
 
 export const updateBookingStatus = (id: string, status: string) =>
-  api.patch<{ message: string }>(`/api/admin/bookings/${id}`, { status });
+  api.patch<{ message: string; trip_stage?: { skipped?: boolean; message?: string; status?: string } | null }>(`/api/admin/bookings/${id}`, { status });
+
+// Granular trip stages (the exact lifecycle the driver app runs). Each apply
+// publishes the same event the driver app would, so both mobile apps advance.
+export const TRIP_STAGES: Array<{ value: string; label: string; needsStop?: boolean }> = [
+  { value: 'ENROUTE_TO_PICKUP', label: 'En route to pickup' },
+  { value: 'ARRIVED_AT_STOP', label: 'Arrived at stop', needsStop: true },
+  { value: 'LOADING_CARGO', label: 'Loading cargo (at pickup)' },
+  { value: 'STOP_COMPLETED', label: 'Stop completed (loaded / delivered)', needsStop: true },
+  { value: 'IN_TRANSIT', label: 'In transit to next stop', needsStop: true },
+  { value: 'COMPLETED', label: 'Trip completed (all stops done)' },
+];
+
+export const advanceBookingTrip = (bookingId: string, body: { status: string; sequence?: number }) =>
+  api.post<{ status: string; booking_status?: string | null; message?: string }>(`/api/admin/trips/${bookingId}/advance`, body);
 
 export const getBookingStats = () =>
   api.get<BookingStats>("/api/admin/bookings/stats");
