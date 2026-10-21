@@ -24,6 +24,8 @@ export type DriverDocument = {
   issued_date: string;
   expiry_date: string | null;
   status: string;
+  /** Set by the backend when expiry_date is in the past (a verified document that expired still has status 'verified'). */
+  is_expired?: boolean;
   rejection_reason?: string | null;
   image_url: string;
   created_at: string;

@@ -108,6 +108,15 @@ const formatDocDate = (value?: string | null) => {
   return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+// Expiry as the backend reports it (`is_expired`), with a date fallback for
+// older responses.
+const isDocExpired = (doc: DriverDocument) => {
+  if (typeof doc.is_expired === 'boolean') return doc.is_expired;
+  if (!doc.expiry_date) return false;
+  const d = new Date(doc.expiry_date);
+  return !Number.isNaN(d.getTime()) && d.getTime() < Date.now();
+};
+
 /** Thumbnail for a document: image preview, a PDF tile, or a generic file tile. */
 function DocumentThumb({ url, title }: { url?: string | null; title: string }) {
   const [failed, setFailed] = useState(false);
@@ -200,6 +209,8 @@ export function Drivers() {
   const [rejectSaving, setRejectSaving] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState(defaultUploadForm);
+  // The expired / rejected document a re-upload replaces (TP-DRV-14).
+  const [reuploadTarget, setReuploadTarget] = useState<DriverDocument | null>(null);
   const [uploading, setUploading] = useState(false);
   // Remounts the file input to clear it after a successful upload.
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -268,6 +279,7 @@ export function Drivers() {
   // Fetch documents when a driver is selected
   useEffect(() => {
     setUploadOpen(false);
+    setReuploadTarget(null);
     setUploadForm(defaultUploadForm);
     setFileInputKey((k) => k + 1);
     if (!selectedDriver) {
@@ -356,8 +368,13 @@ export function Drivers() {
         expiry_date: uploadForm.expiry_date || undefined,
         document_number: uploadForm.document_number.trim() || undefined,
       });
-      toast.success(`${documentTypeLabel(uploadForm.type)} uploaded and submitted for review`);
+      toast.success(
+        reuploadTarget
+          ? `${documentTypeLabel(uploadForm.type)} re-uploaded and submitted for review`
+          : `${documentTypeLabel(uploadForm.type)} uploaded and submitted for review`
+      );
       setUploadForm(defaultUploadForm);
+      setReuploadTarget(null);
       setFileInputKey((k) => k + 1);
       setUploadOpen(false);
       await loadDocuments(selectedDriver.id);
@@ -367,6 +384,20 @@ export function Drivers() {
     } finally {
       setUploading(false);
     }
+  };
+
+  // Re-upload an expired or rejected document (TP-DRV-14): the upload panel
+  // opens pre-set to that document's type and number; the backend replaces the
+  // old document with the new submission.
+  const openReupload = (doc: DriverDocument) => {
+    setReuploadTarget(doc);
+    setUploadForm({
+      ...defaultUploadForm,
+      type: (DRIVER_DOCUMENT_TYPES.some((t) => t.value === doc.type) ? doc.type : defaultUploadForm.type) as DriverDocumentType,
+      document_number: doc.document_number || '',
+    });
+    setFileInputKey((k) => k + 1);
+    setUploadOpen(true);
   };
 
   const handleStatusChange = useCallback(async (driverId: string, newStatus: string, label: string) => {
@@ -507,7 +538,8 @@ export function Drivers() {
 
   const getVerificationProgress = (docs: DriverDocument[]) => {
     if (docs.length === 0) return 0;
-    const verified = docs.filter(d => d.status === 'verified' || d.status === 'approved').length;
+    // An expired document no longer counts towards verification.
+    const verified = docs.filter(d => (d.status === 'verified' || d.status === 'approved') && !isDocExpired(d)).length;
     return Math.round((verified / docs.length) * 100);
   };
 
@@ -535,8 +567,14 @@ export function Drivers() {
   const uploadFormPanel = (
     <div className="p-3 rounded-lg border border-dashed border-border space-y-3">
       <p className="text-sm font-medium flex items-center gap-2">
-        <Upload className="w-4 h-4 text-[#F97316]" /> Upload on the driver's behalf
+        <Upload className="w-4 h-4 text-[#F97316]" />
+        {reuploadTarget ? `Re-upload ${documentTypeLabel(reuploadTarget.type)}` : "Upload on the driver's behalf"}
       </p>
+      {reuploadTarget && (
+        <p className="text-xs text-muted-foreground">
+          The new file replaces the {reuploadTarget.status === 'rejected' ? 'rejected' : 'expired'} document and shows as Pending until it is approved.
+        </p>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="doc-type" className="text-xs">Document type</Label>
         <select
@@ -584,7 +622,7 @@ export function Drivers() {
       </div>
       <div className="flex gap-2 justify-end">
         {driverDocs.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => setUploadOpen(false)} disabled={uploading}>
+          <Button variant="outline" size="sm" onClick={() => { setUploadOpen(false); setReuploadTarget(null); }} disabled={uploading}>
             Cancel
           </Button>
         )}
@@ -1182,8 +1220,11 @@ export function Drivers() {
                     <div className="space-y-2">
                       {driverDocs.map((doc) => {
                         const expiry = formatDocDate(doc.expiry_date);
-                        const expiryDate = doc.expiry_date ? new Date(doc.expiry_date) : null;
-                        const isExpired = !!expiryDate && !Number.isNaN(expiryDate.getTime()) && expiryDate.getTime() < Date.now();
+                        const isExpired = isDocExpired(doc);
+                        // Pending / rejected documents keep their own badge and actions;
+                        // a verified document past its expiry shows as Expired.
+                        const badgeStatus = isExpired && doc.status !== 'pending' && doc.status !== 'rejected' ? 'expired' : doc.status;
+                        const canReupload = doc.status === 'rejected' || (isExpired && doc.status !== 'pending');
                         return (
                           <div key={doc.id} className="p-3 rounded-lg bg-muted/50 space-y-2">
                             <div className="flex items-start gap-3">
@@ -1191,7 +1232,7 @@ export function Drivers() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="text-sm font-medium truncate">{doc.title || documentTypeLabel(doc.type)}</p>
-                                  {getDocumentBadge(doc.status)}
+                                  {getDocumentBadge(badgeStatus)}
                                 </div>
                                 {doc.document_number && (
                                   <p className="text-xs text-muted-foreground truncate">No. {doc.document_number}</p>
@@ -1215,6 +1256,18 @@ export function Drivers() {
                               <p className="text-xs text-red-700 bg-red-50 rounded-md px-2 py-1.5">
                                 Reason: {doc.rejection_reason}
                               </p>
+                            )}
+                            {canReupload && !uploadOpen && (
+                              <div className="flex justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs gap-1 border-[#F97316]/40 text-[#F97316] hover:text-[#F97316]"
+                                  onClick={() => openReupload(doc)}
+                                >
+                                  <Upload className="w-3.5 h-3.5" /> Re-upload
+                                </Button>
+                              </div>
                             )}
                             {doc.status === 'pending' && (
                               <div className="flex gap-2 justify-end">
