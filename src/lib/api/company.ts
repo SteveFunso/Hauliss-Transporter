@@ -118,3 +118,76 @@ export const updateCompany = async (patch: CompanyUpdate): Promise<Company> => {
   if (looksLikeCompany(c)) return normalizeCompany(c);
   return getCompany();
 };
+
+// ---------------------------------------------------------------------------
+// Company compliance documents (Settings → Documents): the company's own
+// uploads (CAC certificate, insurance, tax clearance, …) reviewed by Hauliss,
+// plus the KYC files submitted with the original transporter application.
+// ---------------------------------------------------------------------------
+export type CompanyDocumentStatus = "pending" | "approved" | "rejected";
+
+export type CompanyDocument = {
+  id: string;
+  document_type: string;
+  document_name: string | null;
+  requirement_id: string | null;
+  document_url: string | null;
+  document_number: string | null;
+  expiry_date: string | null;
+  is_expired: boolean;
+  file_name: string | null;
+  status: CompanyDocumentStatus;
+  review_notes: string | null;
+  uploaded_at: number;
+  reviewed_at: number | null;
+};
+
+export type CompanyDocRequirement = {
+  id: string;
+  category: string;
+  name: string;
+  description: string | null;
+  doc_type: string;
+  is_mandatory: boolean;
+  regulator: string | null;
+  sort_order: number;
+  /** Key the uploaded document is stored under (derived from the name). */
+  document_type: string;
+};
+
+export type CompanyKycSubmission = { requirement_id?: string; name?: string; value?: string };
+
+export type CompanyDocumentsPayload = {
+  verification_status: string;
+  requirements: CompanyDocRequirement[];
+  documents: CompanyDocument[];
+  kyc_submissions: CompanyKycSubmission[];
+};
+
+export const getCompanyDocuments = async (): Promise<CompanyDocumentsPayload> => {
+  const res = await api.get<any>("/api/admin/company/documents");
+  const d = res?.data ?? res;
+  return {
+    verification_status: String(d?.verification_status || "unverified"),
+    requirements: Array.isArray(d?.requirements) ? d.requirements : [],
+    documents: Array.isArray(d?.documents) ? d.documents : [],
+    kyc_submissions: Array.isArray(d?.kyc_submissions) ? d.kyc_submissions : [],
+  };
+};
+
+export const submitCompanyDocument = async (data: {
+  document_type: string;
+  document_name?: string;
+  document_url: string;
+  requirement_id?: string | null;
+  document_number?: string;
+  /** YYYY-MM-DD */
+  expiry_date?: string;
+  file_name?: string;
+}): Promise<CompanyDocument> => {
+  const res = await api.post<any>("/api/admin/company/documents", data);
+  return (res?.data ?? res) as CompanyDocument;
+};
+
+export const deleteCompanyDocument = (id: string) =>
+  api.delete<any>(`/api/admin/company/documents/${id}`);

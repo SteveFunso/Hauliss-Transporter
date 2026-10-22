@@ -17,6 +17,7 @@ import {
   UserPlus,
   Landmark,
   KeyRound,
+  FileText,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ import {
   type RolePermissions,
 } from '@/lib/api/company';
 import { createUser, type CreatedUser } from '@/lib/api/users';
+import { CompanyDocuments } from '@/sections/settings/CompanyDocuments';
 import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,7 @@ import { toast } from 'sonner';
 // ---------------------------------------------------------------------------
 const settingsTabs = [
   { id: 'general', name: 'General', icon: Globe },
+  { id: 'documents', name: 'Documents', icon: FileText },
   { id: 'notifications', name: 'Notifications', icon: Bell },
   { id: 'security', name: 'Security', icon: Shield },
   { id: 'payment', name: 'Payment', icon: CreditCard },
@@ -980,6 +983,8 @@ export function Settings() {
               </CardContent>
             </Card>
           )}
+
+          {activeTab === 'documents' && <CompanyDocuments />}
 
           {activeTab === 'team' && (
             <Card className="border-0 shadow-sm">
