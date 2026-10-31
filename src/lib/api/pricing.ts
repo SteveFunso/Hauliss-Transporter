@@ -112,7 +112,13 @@ export type FarePreview = {
   charge_lines: Array<{ id: string; name: string; amount_minor: number; optional: boolean }>;
   transporter_charge_minor: number;
   service_charge_minor: number;
+  /** Shipper service charge, % of fare + charges (set by Hauliss). */
+  service_charge_percent?: number;
+  /** Platform commission, deducted from the transporter's earnings. */
   commission_fee_minor: number;
+  commission_rate_percent?: number;
+  /** Fare + charges − commission. */
+  transporter_earnings_minor?: number;
   tax_fee_minor: number;
   total_minor: number;
   surge_multiplier: number;

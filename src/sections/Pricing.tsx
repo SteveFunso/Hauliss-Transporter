@@ -240,7 +240,7 @@ export function Pricing() {
   const commission = pricing?.commission_rate_percent ?? rateCard?.commission_rate ?? 0;
   const activeSurgeRules = (rateCard?.surge_rules ?? []).filter((r) => r.is_active);
   const kpis = [
-    { label: 'Platform commission', value: formatPercent(commission), hint: 'Added to the shipper\'s total on top of your fare', icon: Percent, color: 'bg-[#F97316]/10 text-[#F97316]' },
+    { label: 'Platform commission', value: formatPercent(commission), hint: 'Deducted from your fare + charges on each trip', icon: Percent, color: 'bg-[#F97316]/10 text-[#F97316]' },
     { label: 'Payout frequency', value: rateCard?.payout_frequency ? humanize(rateCard.payout_frequency) : '—', hint: 'How often earnings are paid out', icon: Clock, color: 'bg-blue-100 text-blue-600' },
     { label: 'Minimum payout', value: formatNaira(rateCard?.min_payout_minor ?? 0), hint: 'Minimum balance before a payout is made', icon: Banknote, color: 'bg-emerald-100 text-emerald-600' },
     { label: 'Processing fee', value: formatNaira(rateCard?.payout_fee_minor ?? 0), hint: 'Charged per payout', icon: Receipt, color: 'bg-amber-100 text-amber-600' },
@@ -265,7 +265,7 @@ export function Pricing() {
         <div>
           <p className="font-medium text-foreground">You set your transport fare and add-on charges. Hauliss sets the commission, service charge, VAT and surge rules.</p>
           <p className="text-muted-foreground">
-            A shipper's total = your transport fare + your charges + Hauliss service charge + commission + VAT. Your fare must stay within the range Hauliss allows per vehicle type.
+            The shipper pays your transport fare + your charges + the Hauliss service charge and VAT on it. You earn your fare + charges minus the platform commission. Your fare must stay within the range Hauliss allows per vehicle type.
           </p>
         </div>
       </div>
@@ -457,11 +457,14 @@ export function Pricing() {
                   {preview.charge_lines.map((l) => (
                     <div key={l.id} className="flex justify-between"><span>{l.name}</span><span className="font-medium">{formatNaira(l.amount_minor)}</span></div>
                   ))}
-                  <div className="flex justify-between text-muted-foreground"><span>Hauliss service charge</span><span>{formatNaira(preview.service_charge_minor)}</span></div>
-                  <div className="flex justify-between text-muted-foreground"><span>Commission ({formatPercent(commission)})</span><span>{formatNaira(preview.commission_fee_minor)}</span></div>
-                  <div className="flex justify-between text-muted-foreground"><span>VAT</span><span>{formatNaira(preview.tax_fee_minor)}</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>Hauliss service charge{preview.service_charge_percent != null ? ` (${formatPercent(preview.service_charge_percent)})` : ''}</span><span>{formatNaira(preview.service_charge_minor)}</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>VAT on the service charge</span><span>{formatNaira(preview.tax_fee_minor)}</span></div>
                   <div className="flex justify-between border-t border-border pt-2 mt-2 font-semibold"><span>Shipper pays</span><span>{formatNaira(preview.total_minor)}</span></div>
-                  <div className="flex justify-between text-emerald-700 font-medium"><span>Your earnings (fare + charges)</span><span>{formatNaira(preview.transporter_charge_minor)}</span></div>
+                  <div className="border-t border-border pt-2 mt-2 space-y-1">
+                    <div className="flex justify-between"><span>Your fare + charges</span><span>{formatNaira(preview.transporter_charge_minor)}</span></div>
+                    <div className="flex justify-between text-muted-foreground"><span>Platform commission ({formatPercent(preview.commission_rate_percent ?? commission)})</span><span>−{formatNaira(preview.commission_fee_minor)}</span></div>
+                    <div className="flex justify-between text-emerald-700 font-medium"><span>Your earnings</span><span>{formatNaira(preview.transporter_earnings_minor ?? preview.transporter_charge_minor - preview.commission_fee_minor)}</span></div>
+                  </div>
                   <p className="text-xs text-muted-foreground pt-1">Priced from {preview.pricing_source === 'company' ? 'your rate card' : preview.pricing_source === 'platform' ? 'the platform rate (no rate of yours for this type)' : 'the catalogue base price'}.</p>
                 </div>
               )}
